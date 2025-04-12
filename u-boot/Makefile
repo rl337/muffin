@@ -5,10 +5,10 @@ UBOOT_VERSION ?= v2025.01
 
 CONTAINER_NAME := muffin_u-boot
 CONTAINER_TAG := $(PROJECT)/$(CONTAINER_NAME)
-UBOOT_REPO := https://source.denx.de/u-boot/u-boot.git
+UBOOT_REPO ?= https://source.denx.de/u-boot/u-boot.git
 
-BUILD_ROOT := $(realpath ../build)
-DIST_ROOT := $(realpath ../dist)
+BUILD_ROOT ?= $(realpath ../build)
+DIST_ROOT ?= $(realpath ../dist)
 
 UBOOT_BUILD_MATRIX := \
 	rpi_4:cortex-a72 \

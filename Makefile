@@ -1,33 +1,44 @@
 .PHONY: all build clean dist u-boot alpine qemu
 
 PROJECT ?= wiggly
-BUILD_DIR := build
-DIST_DIR := dist
+BUILD_ROOT ?= ./build
+DIST_ROOT ?= ./dist
+UBOOT_REPO ?= https://source.denx.de/u-boot/u-boot.git
+
 
 all: build
 
-init:
-	mkdir -p $(BUILD_DIR) $(DIST_DIR)
+$(BUILD_ROOT):
+	mkdir -p $(BUILD_ROOT)
 
-build: init u-boot alpine qemu
+$(DIST_ROOT):
+	mkdir -p $(DIST_ROOT)
+
+init: $(BUILD_ROOT) $(DIST_ROOT)
+
+build: u-boot alpine qemu
 
 clean:
-	$(MAKE) -C u-boot clean PROJECT=$(PROJECT)
-	$(MAKE) -C alpine clean PROJECT=$(PROJECT)
-	$(MAKE) -C qemu clean PROJECT=$(PROJECT)
-	@rmdir $(BUILD_DIR) 2>/dev/null || (echo "ERROR: $(BUILD_DIR) not empty after clean" && exit 1)
-	@rmdir $(DIST_DIR) 2>/dev/null || (echo "ERROR: $(DIST_DIR) not empty after clean" && exit 1)
+	$(MAKE) -C u-boot clean PROJECT=$(PROJECT) BUILD_ROOT=$(BUILD_ROOT) DIST_ROOT=$(DIST_ROOT) UBOOT_REPO=$(UBOOT_REPO)
+	$(MAKE) -C alpine clean PROJECT=$(PROJECT) BUILD_ROOT=$(BUILD_ROOT) DIST_ROOT=$(DIST_ROOT)
+	$(MAKE) -C qemu clean PROJECT=$(PROJECT) BUILD_ROOT=$(BUILD_ROOT) DIST_ROOT=$(DIST_ROOT)
+	if [ -d $(BUILD_ROOT) ]; then \
+		rmdir $(BUILD_ROOT) 2>/dev/null || (echo "ERROR: $(BUILD_ROOT) not empty after clean" && exit 1) \
+	fi
+	if [ -d $(DIST_ROOT) ]; then \
+		rmdir $(DIST_ROOT) 2>/dev/null || (echo "ERROR: $(DIST_ROOT) not empty after clean" && exit 1) \
+	fi
 
-dist:
-	$(MAKE) -C u-boot dist PROJECT=$(PROJECT)
-	$(MAKE) -C alpine dist PROJECT=$(PROJECT)
-	$(MAKE) -C qemu dist PROJECT=$(PROJECT)
+dist: init
+	$(MAKE) -C u-boot dist PROJECT=$(PROJECT) BUILD_ROOT=$(BUILD_ROOT) DIST_ROOT=$(DIST_ROOT) UBOOT_REPO=$(UBOOT_REPO)
+	$(MAKE) -C alpine dist PROJECT=$(PROJECT) BUILD_ROOT=$(BUILD_ROOT) DIST_ROOT=$(DIST_ROOT)
+	$(MAKE) -C qemu dist PROJECT=$(PROJECT) BUILD_ROOT=$(BUILD_ROOT) DIST_ROOT=$(DIST_ROOT)
 
-u-boot:
-	$(MAKE) -C u-boot build PROJECT=$(PROJECT)
+u-boot: init
+	$(MAKE) -C u-boot build PROJECT=$(PROJECT) BUILD_ROOT=$(BUILD_ROOT) DIST_ROOT=$(DIST_ROOT) UBOOT_REPO=$(UBOOT_REPO)
 
-alpine:
-	$(MAKE) -C alpine build PROJECT=$(PROJECT)
+alpine: init
+	$(MAKE) -C alpine build PROJECT=$(PROJECT) BUILD_ROOT=$(BUILD_ROOT) DIST_ROOT=$(DIST_ROOT)
 
-qemu:
-	$(MAKE) -C qemu build PROJECT=$(PROJECT)
+qemu: init
+	$(MAKE) -C qemu build PROJECT=$(PROJECT) BUILD_ROOT=$(BUILD_ROOT) DIST_ROOT=$(DIST_ROOT)	
