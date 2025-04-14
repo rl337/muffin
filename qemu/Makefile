@@ -47,6 +47,8 @@ build: docker-promote build-matrix
 
 clean:
 	@echo "Stub: Cleaning QEMU images..."
+	rm -rf $(BUILD_ROOT)/qemu
+	rm -rf $(DIST_ROOT)/qemu
 
 dist:
 	@echo "Stub: Installing QEMU artifacts to dist/..."
