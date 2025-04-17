@@ -1,7 +1,8 @@
 .PHONY: all build clean dist u-boot alpine qemu
 
 PROJECT ?= wiggly
-SCRATCH_ROOT ?= $(realpath ./scratch)
+PROJECT_ROOT ?= $(realpath .)
+SCRATCH_ROOT ?= $(PROJECT_ROOT)/scratch
 BUILD_ROOT ?= $(SCRATCH_ROOT)/build
 DIST_ROOT ?= $(SCRATCH_ROOT)/dist
 UBOOT_REPO ?= https://source.denx.de/u-boot/u-boot.git
