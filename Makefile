@@ -1,4 +1,4 @@
-.PHONY: all build clean dist u-boot alpine qemu
+.PHONY: all build clean dist u-boot alpine qemu u-boot-build-scr run-qemu
 
 PROJECT ?= wiggly
 PROJECT_ROOT ?= $(realpath .)
@@ -8,6 +8,8 @@ DIST_ROOT ?= $(SCRATCH_ROOT)/dist
 UBOOT_REPO ?= https://source.denx.de/u-boot/u-boot.git
 
 
+TFTP_DIST := $(DIST_ROOT)/tftp
+
 all: build
 
 $(BUILD_ROOT):
@@ -16,7 +18,10 @@ $(BUILD_ROOT):
 $(DIST_ROOT):
 	mkdir -p $(DIST_ROOT)
 
-init: $(BUILD_ROOT) $(DIST_ROOT)
+$(TFTP_DIST): $(DIST_ROOT)
+	mkdir -p $(TFTP_DIST)
+
+init: $(BUILD_ROOT) $(DIST_ROOT) $(TFTP_DIST)
 
 build: u-boot alpine qemu
 
@@ -42,5 +47,14 @@ u-boot: init
 alpine: init
 	$(MAKE) -C alpine build PROJECT=$(PROJECT) BUILD_ROOT=$(BUILD_ROOT) DIST_ROOT=$(DIST_ROOT)
 
+alpine-dist: init
+	$(MAKE) -C alpine dist PROJECT=$(PROJECT) BUILD_ROOT=$(BUILD_ROOT) DIST_ROOT=$(DIST_ROOT)
+
 qemu: init
 	$(MAKE) -C qemu build PROJECT=$(PROJECT) BUILD_ROOT=$(BUILD_ROOT) DIST_ROOT=$(DIST_ROOT)	
+
+u-boot-build-scr: init
+	$(MAKE) -C u-boot build-scr PROJECT=$(PROJECT) BUILD_ROOT=$(BUILD_ROOT) DIST_ROOT=$(DIST_ROOT)
+
+run-qemu: dist
+	$(MAKE) -C qemu run PROJECT=$(PROJECT) BUILD_ROOT=$(BUILD_ROOT) DIST_ROOT=$(DIST_ROOT) TFTP_DIST=$(TFTP_DIST)

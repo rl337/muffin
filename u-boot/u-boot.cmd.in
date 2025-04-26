@@ -1,0 +1,24 @@
+setenv kernel_addr ${KERNEL_ADDR}
+setenv kernel_size ${KERNEL_SIZE}
+setexpr kernel_end ${kernel_addr} + ${kernel_size}
+
+setenv dtb_addr ${DTB_ADDR}
+setenv dtb_size ${DTB_SIZE}
+setexpr dtb_end ${dtb_addr} + ${dtb_size}
+
+setenv initrd_addr ${INITRD_ADDR}
+setenv initrd_size ${INITRD_SIZE}
+setexpr initrd_end ${initrd_addr} + ${initrd_size}
+
+setenv bootargs "${BOOTARGS}"
+
+tftpboot ${kernel_addr} ${KERNEL_IMAGE}
+tftpboot ${dtb_addr} ${DTB_IMAGE}
+tftpboot ${initrd_addr} ${INITRD_IMAGE}
+
+fdt addr ${dtb_addr}
+fdt resize
+fdt set /chosen linux,initrd-start ${initrd_addr}
+fdt set /chosen linux,initrd-end ${initrd_end}
+
+bootefi ${kernel_addr} ${dtb_addr}  

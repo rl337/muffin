@@ -20,6 +20,19 @@ if [ ! -d "$DOWNLOAD_DIR" ]; then
     exit -4
 fi
 
+if [ -z "$TYPE" ]; then
+    echo "TYPE is not set" 1>&2
+    exit -5
+fi
+
+if [ -z "$TITLE" ]; then
+    echo "TITLE is not set" 1>&2
+    exit -6
+fi
+
+
+
+
 ALPINE_BASE_URL="https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/aarch64/"
 LATEST_RELEASES_YAML="$DOWNLOAD_DIR/latest-releases.yaml"
 LATEST_RELEASES_URL="$ALPINE_BASE_URL/latest-releases.yaml"
@@ -73,12 +86,15 @@ extract_partitions() {
 }
 
 get_alpine_image() {
+    IMAGE_TYPE="$1"
+    IMAGE_TITLE="$2"
+
     find "$LATEST_RELEASES_YAML" -ctime +7 -print
     if [ $? -ne 0 ];  then
         download_file "$LATEST_RELEASES_URL" "$LATEST_RELEASES_YAML"
     fi
 
-    LATEST_IMG_DATA=`cat "$LATEST_RELEASES_YAML" |  python -c 'import sys, yaml; y = [x for x in yaml.safe_load(sys.stdin.read()) if x["title"] == sys.argv[1]]; file=y[0]["file"]; sha=y[0]["sha256"]; print(f"{file} {sha}")' "$1"`
+    LATEST_IMG_DATA=`cat "$LATEST_RELEASES_YAML" |  python -c 'import sys, yaml; y = [x for x in yaml.safe_load(sys.stdin.read()) if x["title"] == sys.argv[1]]; file=y[0]["file"]; sha=y[0]["sha256"]; version=y[0]["version"]; print(f"{file} {sha} {version}")' "$IMAGE_TITLE"`
     if [ $? -ne 0 ]; then
         echo "Could not extract image info from $LATEST_RELEASES_YAML" 1>&2
         exit -2
@@ -86,7 +102,11 @@ get_alpine_image() {
 
     LATEST_IMG_FILENAME=`echo "$LATEST_IMG_DATA" | cut -f 1 -d\ `
     LATEST_IMG_SHA=`echo "$LATEST_IMG_DATA" | cut -f 2 -d\ `
+    LATEST_IMG_VERSION=`echo "$LATEST_IMG_DATA" | cut -f 3 -d\ `
     LATEST_IMG_FILE="$DOWNLOAD_DIR/$LATEST_IMG_FILENAME"
+
+    UNPACK_NAME="${IMAGE_TYPE}-${LATEST_IMG_VERSION}"
+
     FILE_EXISTS=0
     if [ -f "$LATEST_IMG_FILE" ]; then
         compare_sha "$LATEST_IMG_FILE" "$LATEST_IMG_SHA"
@@ -106,25 +126,29 @@ get_alpine_image() {
         *.img.gz)
             IMG_FILE_UNCOMPRESSED="$WORKING_DIR/`basename "$LATEST_IMG_FILE" .gz`"
             cat "$LATEST_IMG_FILE" | gunzip > "$IMG_FILE_UNCOMPRESSED"
-            BASENAME=`basename "$LATEST_IMG_FILE" .img.gz`
-            mkdir -p "$WORKING_DIR/$BASENAME"
-            mcopy -i "$IMG_FILE_UNCOMPRESSED" ::boot/* "$WORKING_DIR/$BASENAME"
+            mkdir -p "$WORKING_DIR/$UNPACK_NAME"
+            mcopy -i "$IMG_FILE_UNCOMPRESSED" ::boot/* "$WORKING_DIR/$UNPACK_NAME"
             ;;
         *.iso)
             echo "ISO image"
-            BASENAME=`basename "$LATEST_IMG_FILE" .iso`
-            mkdir -p "$WORKING_DIR/$BASENAME"
-            bsdtar -xf "$LATEST_IMG_FILE" -C "$WORKING_DIR/$BASENAME"
+            mkdir -p "$WORKING_DIR/$UNPACK_NAME"
+            bsdtar -xf "$LATEST_IMG_FILE" -C "$WORKING_DIR/$UNPACK_NAME"
             ;;
         *)
-            echo "Unknown image type"
+            echo "Unknown image type: $LATEST_IMG_FILE" 1>&2
             exit -1
             ;;
     esac
+    META_FILE="$WORKING_DIR/$TYPE-meta.txt"
+    rm -f "$META_FILE"
+    echo "IMAGE_TITLE=$IMAGE_TITLE" >> "$META_FILE"
+    echo "IMAGE_TYPE=$IMAGE_TYPE" >> "$META_FILE"
+    echo "IMAGE_VERSION=$LATEST_IMG_VERSION" >> "$META_FILE"
+    echo "IMAGE_FILE=$LATEST_IMG_FILE" >> "$META_FILE"
+    echo "UNPACK_NAME=$UNPACK_NAME" >> "$META_FILE"
 }
 
-get_alpine_image "Virtual"
-get_alpine_image "Raspberry Pi Disk Image"
+get_alpine_image "$TYPE" "$TITLE"
 
 
 

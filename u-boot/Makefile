@@ -1,4 +1,4 @@
-.PHONY: build clean dist docker-build docker-promote uboot-fetch build-matrix build-platform
+.PHONY: build clean dist docker-build docker-promote uboot-fetch build-matrix build-platform build-scr
 
 PROJECT ?= wiggly
 UBOOT_VERSION ?= v2025.01
@@ -76,6 +76,34 @@ build-matrix: docker-promote uboot-fetch
 	done
 
 build: init build-matrix
+
+build-scr:
+	KERNEL_IMAGE=vmlinuz-virt-3.21.3 \
+	KERNEL_ADDR=0x40080000 \
+	KERNEL_SIZE=$$(printf '0x%08X' 9585152) \
+	DTB_IMAGE=virt-cortex-a72-1cpu-512M-dtc.dtb \
+	DTB_ADDR=0x41000000 \
+	DTB_SIZE=$$(printf '0x%08X' 398) \
+	INITRD_IMAGE=initramfs-virt-3.21.3 \
+	INITRD_ADDR=0x43000000 \
+	INITRD_SIZE=$$(printf '0x%08X' 9433213) \
+	BOOTARGS="console=ttyAMA0" \
+		envsubst '$$KERNEL_IMAGE $$KERNEL_ADDR $$KERNEL_SIZE $$DTB_IMAGE $$DTB_ADDR $$DTB_SIZE $$INITRD_IMAGE $$INITRD_ADDR $$INITRD_SIZE $$BOOTARGS' < \
+		    ./u-boot.cmd.in > $(WORKING_DIR)/u-boot.cmd
+	
+	docker run --rm \
+		-v $(WORKING_DIR):/build \
+		$(CONTAINER_TAG):build \
+		/bin/sh -c "\
+			cd /build && \
+			/build/checkout/u-boot/tools/mkimage \
+				-A arm64 \
+				-T script \
+				-C none \
+				-n 'U-Boot script' \
+				-d /build/u-boot.cmd \
+				/build/u-boot.scr"
+
 
 clean:
 	rm -rf $(WORKING_DIR)

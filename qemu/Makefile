@@ -2,9 +2,16 @@
 
 BUILD_ROOT ?= $(realpath ../build)
 DIST_ROOT ?= $(realpath ../dist)
+TFTP_DIST ?= $(DIST_ROOT)/tftp
 
 CONTAINER_NAME := muffin_qemu
 PROJECT ?= wiggly
+
+WORKING_DIR := $(BUILD_ROOT)/qemu
+ALPINE_DIR := $(BUILD_ROOT)/alpine
+UBOOT_DIR := $(BUILD_ROOT)/u-boot
+CHECKOUT_DIR := $(WORKING_DIR)/checkout
+
 DTB_CONFIGS := \
   cortex-a72:1:512M \
   cortex-a76:2:2048M
@@ -38,19 +45,42 @@ build-matrix:
 	      -device virtio-blk-device,drive=hd0 \
 	      -nographic \
 	      -kernel /dev/null \
-	      -machine dumpdtb=/build/qemu/virt-$${cpu}-$${cores}cpu-$${mem}.dtb; \
+	      -machine dumpdtb=/build/qemu/virt-$${cpu}-$${cores}cpu-$${mem}-qemu.dtb; \
+	  RAM_SIZE=0x20000000 \
+	  envsubst < ./virt.dts.in > $(WORKING_DIR)/virt-$${cpu}-$${cores}cpu-$${mem}-dtc.dts; \
+	  docker run --rm \
+	    -v $(BUILD_ROOT):/build \
+	    $(CONTAINER_TAG):build \
+	    dtc -I dts -O dtb -o /build/qemu/virt-$${cpu}-$${cores}cpu-$${mem}-dtc.dtb \
+	      /build/qemu/virt-$${cpu}-$${cores}cpu-$${mem}-dtc.dts; \
 	done
 
+run:
+	ls -l $(WORKING_DIR)
+	docker run -it --rm \
+		-v $(WORKING_DIR):/build \
+		-v $(ALPINE_DIR):/alpine \
+		-v $(UBOOT_DIR):/u-boot \
+		-v $(TFTP_DIST):/tftp \
+		$(CONTAINER_TAG):build \
+		qemu-system-aarch64 \
+			-machine virt \
+			-cpu cortex-a72 \
+			-m 512M \
+			-nographic \
+			-netdev user,id=net0,tftp=/tftp,bootfile=u-boot.scr \
+			-device virtio-net-device,netdev=net0 \
+			-bios /u-boot/u-boot-qemu_arm64-cortex-a72.bin 
 
 build: docker-promote build-matrix
 	@echo "Stub: Building QEMU disk images..."
 
 clean:
 	@echo "Stub: Cleaning QEMU images..."
-	rm -rf $(BUILD_ROOT)/qemu
+	rm -rf $(WORKING_DIR)
 	rm -rf $(DIST_ROOT)/qemu
 
 dist:
 	@echo "Stub: Installing QEMU artifacts to dist/..."
 	mkdir -p $(DIST_ROOT)/qemu
-	cp $(BUILD_ROOT)/qemu/*.dtb $(DIST_ROOT)/qemu/
+	cp $(WORKING_DIR)/*.dtb $(TFTP_DIST)/
