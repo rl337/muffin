@@ -21,6 +21,23 @@
         };
     };
 
+    intc: interrupt-controller@8000000 {
+        compatible = "arm,cortex-a15-gic", "arm,cortex-a7-gic";
+        #interrupt-cells = <3>;
+        interrupt-controller;
+        reg = <0x0 0x08000000 0x0 0x1000>,   /* GICD Distributor */
+              <0x0 0x08010000 0x0 0x100>;    /* GICC CPU Interface */
+    };
+
+    timer {
+        compatible = "arm,armv8-timer";
+        interrupt-parent = <&intc>;
+        interrupts = <1 13 0xf08>,
+                     <1 14 0xf08>,
+                     <1 11 0xf08>,
+                     <1 10 0xf08>;
+    };
+
     chosen {
     };
 };

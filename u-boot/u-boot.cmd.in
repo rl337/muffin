@@ -9,6 +9,7 @@ setexpr dtb_end ${dtb_addr} + ${dtb_size}
 setenv initrd_addr ${INITRD_ADDR}
 setenv initrd_size ${INITRD_SIZE}
 setexpr initrd_end ${initrd_addr} + ${initrd_size}
+setenv initrd_end 0x${initrd_end} # necessary because fd set requires a 0x prefix
 
 setenv bootargs "${BOOTARGS}"
 
@@ -18,7 +19,10 @@ tftpboot ${initrd_addr} ${INITRD_IMAGE}
 
 fdt addr ${dtb_addr}
 fdt resize
-fdt set /chosen linux,initrd-start ${initrd_addr}
-fdt set /chosen linux,initrd-end ${initrd_end}
+fdt set /chosen linux,initrd-start <${initrd_addr}>
+fdt set /chosen linux,initrd-end <${initrd_end}>
+fdt print /chosen
+
+printenv
 
 bootefi ${kernel_addr} ${dtb_addr}  

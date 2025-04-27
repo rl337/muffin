@@ -14,10 +14,10 @@ WORKING_DIR := $(BUILD_ROOT)/u-boot
 CHECKOUT_DIR := $(WORKING_DIR)/checkout
 
 UBOOT_BUILD_MATRIX := \
-	rpi_4:cortex-a72 \
-	qemu_arm64:cortex-a76 \
-	qemu_arm64:cortex-a72 \
-	rpi_arm64:cortex-a76
+	qemu_arm64:cortex-a72 
+#	qemu_arm64:cortex-a76 \
+#	rpi_4:cortex-a72 \
+#	rpi_arm64:cortex-a76 \
 
 init:
 	mkdir -p $(WORKING_DIR)
@@ -51,6 +51,10 @@ ifndef CPU
 	$(error CPU is not set)
 endif
 
+	@echo "===> Building U-Boot for $(QEMU_CONF) on $(CPU)..."
+	UBOOT_SCRIPT="u-boot.scr" envsubst < defconf_append.in > $(WORKING_DIR)/defconf_append
+	cp $(CHECKOUT_DIR)/u-boot/configs/$(QEMU_CONF)_defconfig $(CHECKOUT_DIR)/u-boot/configs/$(QEMU_CONF)_$(PROJECT)_defconfig
+	cat $(WORKING_DIR)/defconf_append >> $(CHECKOUT_DIR)/u-boot/configs/$(QEMU_CONF)_$(PROJECT)_defconfig
 	[ -f $(WORKING_DIR)/u-boot-$(QEMU_CONF)-$(CPU).bin ] || \
 		docker run --rm \
 			-v $(WORKING_DIR):/build \
@@ -61,7 +65,7 @@ endif
 		/bin/sh -c "\
 			set -e; \
 			make distclean && \
-			make $(QEMU_CONF)_defconfig && \
+			make $(QEMU_CONF)_$(PROJECT)_defconfig && \
 			make CROSS_COMPILE=aarch64-none-elf- CFLAGS=\"-O2 -mcpu=$(CPU)\" -j4 && \
 			cp .config /build/config-$(QEMU_CONF)-$(CPU) && \
 			cp u-boot.bin /build/u-boot-$(QEMU_CONF)-$(CPU).bin"
@@ -87,7 +91,7 @@ build-scr:
 	INITRD_IMAGE=initramfs-virt-3.21.3 \
 	INITRD_ADDR=0x43000000 \
 	INITRD_SIZE=$$(printf '0x%08X' 9433213) \
-	BOOTARGS="console=ttyAMA0" \
+	BOOTARGS="console=ttyAMA0 earlycon=pl011,mmio,0x9000000 rw init=/init" \
 		envsubst '$$KERNEL_IMAGE $$KERNEL_ADDR $$KERNEL_SIZE $$DTB_IMAGE $$DTB_ADDR $$DTB_SIZE $$INITRD_IMAGE $$INITRD_ADDR $$INITRD_SIZE $$BOOTARGS' < \
 		    ./u-boot.cmd.in > $(WORKING_DIR)/u-boot.cmd
 	
