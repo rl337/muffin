@@ -40,4 +40,18 @@
 
     chosen {
     };
+
+    virtio_block@10002000 {
+        compatible = "virtio,mmio";
+        reg = <0x0 0x10002000 0x0 0x1000>;
+        interrupt-parent = <&intc>;
+        interrupts = <0 1 4>; /* IRQ #1, level high */
+    };
+
+    virtio_net@10001000 {
+        compatible = "virtio,mmio";
+        reg = <0x0 0x10001000 0x0 0x1000>;
+        interrupt-parent = <&intc>;
+        interrupts = <0 2 4>; /* IRQ #2, level high */
+    };
 };

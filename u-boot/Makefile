@@ -19,7 +19,7 @@ UBOOT_BUILD_MATRIX := \
 #	rpi_4:cortex-a72 \
 #	rpi_arm64:cortex-a76 \
 
-init:
+init: 
 	mkdir -p $(WORKING_DIR)
 	mkdir -p $(CHECKOUT_DIR)
 
@@ -82,7 +82,7 @@ build-matrix: docker-promote uboot-fetch
 build: init build-matrix
 
 build-scr:
-	KERNEL_IMAGE=vmlinuz-virt-3.21.3 \
+	KERNEL_IMAGE=vmlinuz-virt-3.21.3-actual \
 	KERNEL_ADDR=0x40080000 \
 	KERNEL_SIZE=$$(printf '0x%08X' 9585152) \
 	DTB_IMAGE=virt-cortex-a72-1cpu-512M-dtc.dtb \
@@ -91,7 +91,7 @@ build-scr:
 	INITRD_IMAGE=initramfs-virt-3.21.3 \
 	INITRD_ADDR=0x43000000 \
 	INITRD_SIZE=$$(printf '0x%08X' 9433213) \
-	BOOTARGS="console=ttyAMA0 earlycon=pl011,mmio,0x9000000 rw init=/init" \
+	BOOTARGS="console=ttyAMA0 earlycon root=/dev/vda" \
 		envsubst '$$KERNEL_IMAGE $$KERNEL_ADDR $$KERNEL_SIZE $$DTB_IMAGE $$DTB_ADDR $$DTB_SIZE $$INITRD_IMAGE $$INITRD_ADDR $$INITRD_SIZE $$BOOTARGS' < \
 		    ./u-boot.cmd.in > $(WORKING_DIR)/u-boot.cmd
 	

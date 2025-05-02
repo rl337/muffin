@@ -19,10 +19,11 @@ tftpboot ${initrd_addr} ${INITRD_IMAGE}
 
 fdt addr ${dtb_addr}
 fdt resize
+fdt set /chosen bootargs "console=ttyAMA0 root=/dev/vda"
 fdt set /chosen linux,initrd-start <${initrd_addr}>
 fdt set /chosen linux,initrd-end <${initrd_end}>
 fdt print /chosen
 
 printenv
 
-bootefi ${kernel_addr} ${dtb_addr}  
+booti ${kernel_addr} ${initrd_addr}:${initrd_size} ${fdt_addr}
