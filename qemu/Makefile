@@ -87,8 +87,9 @@ run: docker-promote create-qcow2
 			-m 512M \
 			-nographic \
 			-device virtio-net-device,id=net0dev,netdev=net0 \
+			-cdrom /alpine/downloads/alpine-virt-3.21.3-aarch64.iso \
 			-netdev user,id=net0,tftp=/tftp,bootfile=u-boot.scr \
-			-drive file=/build/virt-hd0.qcow2,media=disk,format=qcow2,if=virtio \
+			-drive file=/build/virt-hd0.qcow2,media=disk,format=qcow2 \
 			-bios /u-boot/u-boot-qemu_arm64-cortex-a72.bin 
 
 build: docker-promote build-matrix

@@ -82,17 +82,13 @@ build-matrix: docker-promote uboot-fetch
 build: init build-matrix
 
 build-scr:
-	KERNEL_IMAGE=vmlinuz-virt-3.21.3-actual \
-	KERNEL_ADDR=0x40080000 \
-	KERNEL_SIZE=$$(printf '0x%08X' 9585152) \
-	DTB_IMAGE=virt-cortex-a72-1cpu-512M-dtc.dtb \
-	DTB_ADDR=0x41000000 \
-	DTB_SIZE=$$(printf '0x%08X' 398) \
+	KERNEL_IMAGE=vmlinuz-virt-3.21.3 \
+	KERNEL_ADDR=0x40200000 \
+	INITRD_ADDR=0x42D00000 \
 	INITRD_IMAGE=initramfs-virt-3.21.3 \
-	INITRD_ADDR=0x43000000 \
 	INITRD_SIZE=$$(printf '0x%08X' 9433213) \
-	BOOTARGS="console=ttyAMA0 earlycon root=/dev/vda" \
-		envsubst '$$KERNEL_IMAGE $$KERNEL_ADDR $$KERNEL_SIZE $$DTB_IMAGE $$DTB_ADDR $$DTB_SIZE $$INITRD_IMAGE $$INITRD_ADDR $$INITRD_SIZE $$BOOTARGS' < \
+	BOOTARGS="console=ttyAMA0 earlycon" \
+		envsubst '$$KERNEL_IMAGE $$KERNEL_ADDR $$INITRD_IMAGE $$INITRD_ADDR $$INITRD_SIZE $$BOOTARGS' < \
 		    ./u-boot.cmd.in > $(WORKING_DIR)/u-boot.cmd
 	
 	docker run --rm \
