@@ -1,4 +1,4 @@
-.PHONY: init build clean dist docker-build docker-promote get-latest-images scour
+.PHONY: init build clean dist docker-build docker-promote get-latest-images scour verify-type verify-title
 
 CONTAINER_NAME := muffin_alpine
 PROJECT ?= wiggly
@@ -21,13 +21,32 @@ docker-build:
 docker-promote: docker-build
 	docker tag $(CONTAINER_TAG):latest $(CONTAINER_TAG):build
 
-get-latest-image:
+
+verify-type:
+	@if [ -z "$(TYPE)" ]; then \
+		echo "TYPE is not set"; \
+		exit 1; \
+	fi
+
+verify-title:
+	@if [ -z "$(TITLE)" ]; then \
+		echo "TITLE is not set"; \
+		exit 1; \
+	fi
+
+
+get-latest-image: docker-promote
 	docker run --rm \
 	    -v .:/app \
 		-v $(WORKING_DIR):/working \
 		-v $(DOWNLOAD_DIR):/downloads \
 		$(CONTAINER_TAG):build \
 		/bin/sh -c "cd /app && WORKING_DIR=/working DOWNLOAD_DIR=/downloads TYPE='$(TYPE)' TITLE='$(TITLE)' bash ./get-latest.sh"
+
+
+downloads: verify-type verify-title
+
+
 
 build: init docker-promote
 	@echo "Stub: Building Alpine base images..."
