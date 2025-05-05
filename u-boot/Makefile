@@ -79,13 +79,14 @@ $(BUILD_ROOT)/u-boot-$(UBOOT_CONF)-$(CPU).bin: $(UBOOT_CONFIGS_DIR)/$(UBOOT_CONF
 			cp .config /build/config-$(UBOOT_CONF)-$(CPU) && \
 			cp u-boot.bin /build/u-boot-$(UBOOT_CONF)-$(CPU).bin"
 
-build: init docker-promote verify-u-boot-conf verify-cpu $(BUILD_ROOT)/u-boot-$(UBOOT_CONF)-$(CPU).bin
+build: init docker-promote verify-u-boot-conf verify-cpu 
 ifndef UBOOT_CONF
 	$(error UBOOT_CONF is not set)
 endif
 ifndef CPU
 	$(error CPU is not set)
 endif
+	$(MAKE) $(BUILD_ROOT)/u-boot-$(UBOOT_CONF)-$(CPU).bin
 
 	@echo "===> Built U-Boot for $(UBOOT_CONF) on $(CPU)..."
 
