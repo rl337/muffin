@@ -4,16 +4,19 @@ CONTAINER_NAME := muffin_alpine
 PROJECT ?= wiggly
 
 BUILD_ROOT ?= $(realpath ../build)
-DIST_ROOT ?= $(realpath ../dist)
-TFTP_DIST ?= $(DIST_ROOT)/tftp
-WORKING_DIR ?= $(BUILD_ROOT)/alpine
-DOWNLOAD_DIR ?= $(WORKING_DIR)/downloads
-
 CONTAINER_TAG := $(PROJECT)/$(CONTAINER_NAME)
 
-init:
-	mkdir -p $(WORKING_DIR)
-	mkdir -p $(DOWNLOAD_DIR)
+ifndef DOWNLOADS_ROOT
+	$(error DOWNLOADS_ROOT is not set. Usage: $(MAKE) DOWNLOADS_ROOT=value)
+endif
+
+ifndef BUILD_ROOT
+	$(error BUILD_ROOT is not set. Usage: $(MAKE) BUILD_ROOT=value)
+endif
+
+ifndef ALPINE_VERSION
+	$(error ALPINE_VERSION is not set. Usage: $(MAKE) ALPINE_VERSION=value)
+endif
 
 docker-build:
 	docker build -t $(CONTAINER_TAG):latest .
@@ -28,33 +31,33 @@ verify-type:
 		exit 1; \
 	fi
 
-verify-title:
-	@if [ -z "$(TITLE)" ]; then \
-		echo "TITLE is not set"; \
+verify-arch:
+	@if [ -z "$(ARCH)" ]; then \
+		echo "ARCH is not set"; \
 		exit 1; \
 	fi
 
+verify-alpine-version:
+	@if [ -z "$(ALPINE_VERSION)" ]; then \
+		echo "ALPINE_VERSION is not set"; \
+		exit 1; \
+	fi
 
-get-latest-image: docker-promote
+get-alpine-image: verify-type verify-arch verify-alpine-version docker-promote
+
 	docker run --rm \
 	    -v .:/app \
-		-v $(WORKING_DIR):/working \
-		-v $(DOWNLOAD_DIR):/downloads \
+		-v $(DOWNLOADS_ROOT):/downloads \
+		-v $(BUILD_ROOT):/build \
 		$(CONTAINER_TAG):build \
-		/bin/sh -c "cd /app && WORKING_DIR=/working DOWNLOAD_DIR=/downloads TYPE='$(TYPE)' TITLE='$(TITLE)' bash ./get-latest.sh"
+		/bin/sh -c "cd /app && BUILD_DIR=/build DOWNLOAD_DIR=/downloads TYPE='$(TYPE)' TITLE='$(TITLE)' ALPINE_VERSION='$(ALPINE_VERSION)' ARCH='$(ARCH)' bash ./get-alpine.sh"
 
 
-downloads: verify-type verify-title
-
-
-
-build: init docker-promote
+build: init docker-promote verify-type verify-arch
 	@echo "Stub: Building Alpine base images..."
 
-	$(MAKE) get-latest-image TYPE=virt TITLE="Virtual"
-	$(MAKE) get-latest-image TYPE=rpi TITLE="Raspberry Pi Disk Image"
+	$(MAKE) get-alpine-image TYPE=$(TYPE) ARCH=$(ARCH) ALPINE_VERSION=$(ALPINE_VERSION) DOWNLOADS_ROOT=$(DOWNLOADS_ROOT) BUILD_ROOT=$(BUILD_ROOT)
 
-	
 clean:
 	rm -rf $(WORKING_DIR)
 

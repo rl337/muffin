@@ -54,7 +54,20 @@ downloads: $(DOWNLOADS_ROOT)
 $(UBOOT_BUILD)/u-boot-qemu_arm64-cortex-a72.bin: $(UBOOT_BUILD)
 	$(MAKE) -C u-boot build PROJECT=$(PROJECT) DOWNLOADS_ROOT=$(DOWNLOADS_ROOT) BUILD_ROOT=$(UBOOT_BUILD) UBOOT_CONF=qemu_arm64 CPU=cortex-a72
 
-build: $(UBOOT_BUILD)/u-boot-qemu_arm64-cortex-a72.bin
+$(ALPINE_BUILD)/vmlinuz-rpi-aarch64-latest-stable: $(ALPINE_BUILD)
+	$(MAKE) -C alpine build PROJECT=$(PROJECT) DOWNLOADS_ROOT=$(DOWNLOADS_ROOT) BUILD_ROOT=$(ALPINE_BUILD) ALPINE_VERSION=latest-stable ARCH=aarch64 TYPE=rpi TITLE="Raspberry Pi Disk Image"
+
+$(ALPINE_BUILD)/vmlinuz-virt-aarch64-latest-stable: $(ALPINE_BUILD)
+	$(MAKE) -C alpine build PROJECT=$(PROJECT) DOWNLOADS_ROOT=$(DOWNLOADS_ROOT) BUILD_ROOT=$(ALPINE_BUILD) ALPINE_VERSION=latest-stable ARCH=aarch64 TYPE=virt TITLE="Virtual"
+
+$(ALPINE_BUILD)/vmlinuz-virt-x86_64-latest-stable: $(ALPINE_BUILD)
+	$(MAKE) -C alpine build PROJECT=$(PROJECT) DOWNLOADS_ROOT=$(DOWNLOADS_ROOT) BUILD_ROOT=$(ALPINE_BUILD) ALPINE_VERSION=latest-stable ARCH=x86_64 TYPE=virt TITLE="Virtual"
+
+
+build-u-boot: $(UBOOT_BUILD)/u-boot-qemu_arm64-cortex-a72.bin
+build-alpine: $(ALPINE_BUILD)/alpine-rpi-latest-stable-aarch64-vmlinuz $(ALPINE_BUILD)/alpine-virt-latest-stable-aarch64-vmlinuz $(ALPINE_BUILD)/alpine-virt-latest-stable-x86_64-vmlinuz
+
+build: build-u-boot build-alpine
 
 
 clean:

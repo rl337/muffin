@@ -1,12 +1,12 @@
 
 
-if [ -z "$WORKING_DIR" ]; then
-    echo "WORKING_DIR is not set" 1>&2
+if [ -z "$BUILD_DIR" ]; then
+    echo "BUILD_DIR is not set" 1>&2
     exit -1
 fi
 
-if [ ! -d "$WORKING_DIR" ]; then
-    echo "WORKING_DIR $WORKING_DIR does not exist" 1>&2
+if [ ! -d "$BUILD_DIR" ]; then
+    echo "BUILD_DIR $BUILD_DIR does not exist" 1>&2
     exit -2
 fi
 
@@ -20,21 +20,36 @@ if [ ! -d "$DOWNLOAD_DIR" ]; then
     exit -4
 fi
 
+if [ -z "$ALPINE_VERSION" ]; then
+    echo "ALPINE_VERSION is not set" 1>&2
+    exit -5
+fi
+
 if [ -z "$TYPE" ]; then
     echo "TYPE is not set" 1>&2
     exit -5
 fi
 
-if [ -z "$TITLE" ]; then
-    echo "TITLE is not set" 1>&2
-    exit -6
+case "$TYPE" in
+    virt)
+        TITLE="Virtual"
+        ;;
+    rpi)
+        TITLE="Raspberry Pi Disk Image"
+        ;;
+    *)
+        echo "TYPE $TYPE is not supported" 1>&2
+        exit -6
+esac
+
+if [ -z "$ARCH" ]; then
+    echo "ARCH is not set" 1>&2
+    exit -7
 fi
 
 
-
-
-ALPINE_BASE_URL="https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/aarch64/"
-LATEST_RELEASES_YAML="$DOWNLOAD_DIR/latest-releases.yaml"
+ALPINE_BASE_URL="https://dl-cdn.alpinelinux.org/alpine/$ALPINE_VERSION/releases/$ARCH/"
+LATEST_RELEASES_YAML="$BUILD_DIR/latest-releases-$ALPINE_VERSION-$ARCH.yaml"
 LATEST_RELEASES_URL="$ALPINE_BASE_URL/latest-releases.yaml"
 
 download_file() {
@@ -82,13 +97,13 @@ extract_partitions() {
     echo "SECTOR_SIZE=$SECTOR_SIZE"
     echo "DOS_PARTITION=$DOS_PARTITION"
     echo "LINUX_PARTITION=$LINUX_PARTITION"
-
 }
 
 get_alpine_image() {
     IMAGE_TYPE="$1"
     IMAGE_TITLE="$2"
-
+    IMAGE_VERSION="$3"
+    IMAGE_ARCH="$4"
     find "$LATEST_RELEASES_YAML" -ctime +7 -print
     if [ $? -ne 0 ];  then
         download_file "$LATEST_RELEASES_URL" "$LATEST_RELEASES_YAML"
@@ -105,7 +120,7 @@ get_alpine_image() {
     LATEST_IMG_VERSION=`echo "$LATEST_IMG_DATA" | cut -f 3 -d\ `
     LATEST_IMG_FILE="$DOWNLOAD_DIR/$LATEST_IMG_FILENAME"
 
-    UNPACK_NAME="${IMAGE_TYPE}-${LATEST_IMG_VERSION}"
+    UNPACK_NAME="${IMAGE_TYPE}-${IMAGE_ARCH}-${IMAGE_VERSION}"
 
     FILE_EXISTS=0
     if [ -f "$LATEST_IMG_FILE" ]; then
@@ -122,33 +137,54 @@ get_alpine_image() {
         compare_sha "$LATEST_IMG_FILE" "$LATEST_IMG_SHA"    
     fi
 
+    UNPACK_DIR="$BUILD_DIR/$UNPACK_NAME"
     case "$LATEST_IMG_FILE" in
         *.img.gz)
-            IMG_FILE_UNCOMPRESSED="$WORKING_DIR/`basename "$LATEST_IMG_FILE" .gz`"
+            IMG_FILE_UNCOMPRESSED="$BUILD_DIR/`basename "$LATEST_IMG_FILE" .gz`"
             cat "$LATEST_IMG_FILE" | gunzip > "$IMG_FILE_UNCOMPRESSED"
-            mkdir -p "$WORKING_DIR/$UNPACK_NAME"
-            mcopy -i "$IMG_FILE_UNCOMPRESSED" ::boot/* "$WORKING_DIR/$UNPACK_NAME"
+            mkdir -p "$UNPACK_DIR"
+            mcopy -i "$IMG_FILE_UNCOMPRESSED" ::boot/* "$UNPACK_DIR"
             ;;
         *.iso)
             echo "ISO image"
-            mkdir -p "$WORKING_DIR/$UNPACK_NAME"
-            bsdtar -xf "$LATEST_IMG_FILE" -C "$WORKING_DIR/$UNPACK_NAME"
+            mkdir -p "$UNPACK_DIR"
+            bsdtar -xf "$LATEST_IMG_FILE" -C "$UNPACK_DIR"
             ;;
         *)
             echo "Unknown image type: $LATEST_IMG_FILE" 1>&2
             exit -1
             ;;
     esac
-    META_FILE="$WORKING_DIR/$TYPE-meta.txt"
+
+    VMLINUZ_FILE="$BUILD_DIR/vmlinuz-${UNPACK_NAME}"
+    if [ -f "$UNPACK_DIR/boot/vmlinuz-${IMAGE_TYPE}" ]; then
+        cp "$UNPACK_DIR/boot/vmlinuz-${IMAGE_TYPE}" "$VMLINUZ_FILE"
+    elif [ -f "$UNPACK_DIR/vmlinuz-${IMAGE_TYPE}" ]; then
+        cp "$UNPACK_DIR/vmlinuz-${IMAGE_TYPE}" "$VMLINUZ_FILE"
+    else
+        echo "vmlinuz-${IMAGE_TYPE} not found in $UNPACK_NAME" 1>&2
+        exit -1
+    fi
+
+    INITRAMFS_FILE="$BUILD_DIR/initramfs-${UNPACK_NAME}"
+    if [ -f "$UNPACK_DIR/boot/initramfs-${IMAGE_TYPE}" ]; then
+        cp "$UNPACK_DIR/boot/initramfs-${IMAGE_TYPE}" "$INITRAMFS_FILE"
+    elif [ -f "$UNPACK_DIR/initramfs-${IMAGE_TYPE}" ]; then
+        cp "$UNPACK_DIR/initramfs-${IMAGE_TYPE}" "$INITRAMFS_FILE"
+    fi
+
+    META_FILE="$BUILD_DIR/meta-${IMAGE_TYPE}-${UNPACK_NAME}.txt"
     rm -f "$META_FILE"
     echo "IMAGE_TITLE=$IMAGE_TITLE" >> "$META_FILE"
     echo "IMAGE_TYPE=$IMAGE_TYPE" >> "$META_FILE"
     echo "IMAGE_VERSION=$LATEST_IMG_VERSION" >> "$META_FILE"
     echo "IMAGE_FILE=$LATEST_IMG_FILE" >> "$META_FILE"
     echo "UNPACK_NAME=$UNPACK_NAME" >> "$META_FILE"
+    echo "VMLINUZ_FILE=$VMLINUZ_FILE" >> "$META_FILE"
+    echo "INITRAMFS_FILE=$INITRAMFS_FILE" >> "$META_FILE"
 }
 
-get_alpine_image "$TYPE" "$TITLE"
+get_alpine_image "$TYPE" "$TITLE" "$ALPINE_VERSION" "$ARCH"
 
 
 
