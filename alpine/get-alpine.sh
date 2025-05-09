@@ -165,14 +165,28 @@ get_alpine_image() {
         echo "vmlinuz-${IMAGE_TYPE} not found in $UNPACK_NAME" 1>&2
         exit -1
     fi
-
+    VMLINUZ_FILE_SIZE=`stat -c%s "$VMLINUZ_FILE"`
     INITRAMFS_FILE="$BUILD_DIR/initramfs-${UNPACK_NAME}"
     if [ -f "$UNPACK_DIR/boot/initramfs-${IMAGE_TYPE}" ]; then
         cp "$UNPACK_DIR/boot/initramfs-${IMAGE_TYPE}" "$INITRAMFS_FILE"
     elif [ -f "$UNPACK_DIR/initramfs-${IMAGE_TYPE}" ]; then
         cp "$UNPACK_DIR/initramfs-${IMAGE_TYPE}" "$INITRAMFS_FILE"
+    else
+        echo "initramfs-${IMAGE_TYPE} not found in $UNPACK_NAME" 1>&2
+        exit -1
     fi
+    INITRAMFS_FILE_SIZE=`stat -c%s "$INITRAMFS_FILE"`
 
+    # extract actual kernel from efi stub
+    KERNEL_FILE="$BUILD_DIR/vmlinuz-actual-${UNPACK_NAME}"
+    KERNEL_OFFSET=`grep -abo $'\x1f\x8b\x08' "$VMLINUZ_FILE" | head -n 1 | cut -f 1 -d: | tr -d ' '`
+    if [ $? -ne 0 ]; then
+        echo "Could not find vmlinuz offset in $VMLINUZ_FILE" 1>&2
+        exit -1
+    fi
+    KERNEL_OFFSET=$((KERNEL_OFFSET + 1))
+    tail -c +$KERNEL_OFFSET "$VMLINUZ_FILE" | gunzip > "$KERNEL_FILE" 2>/dev/null
+    KERNEL_FILE_SIZE=`stat -c%s "$KERNEL_FILE"`
     META_FILE="$BUILD_DIR/meta-${IMAGE_TYPE}-${UNPACK_NAME}.txt"
     rm -f "$META_FILE"
     echo "IMAGE_TITLE=$IMAGE_TITLE" >> "$META_FILE"
@@ -182,9 +196,105 @@ get_alpine_image() {
     echo "UNPACK_NAME=$UNPACK_NAME" >> "$META_FILE"
     echo "VMLINUZ_FILE=$VMLINUZ_FILE" >> "$META_FILE"
     echo "INITRAMFS_FILE=$INITRAMFS_FILE" >> "$META_FILE"
+    echo "UNCOMPRESSED_KERNEL=$KERNEL_FILE" >> "$META_FILE"
+    echo "VMLINUZ_FILE_SIZE=$VMLINUZ_FILE_SIZE" >> "$META_FILE"
+    echo "INITRAMFS_FILE_SIZE=$INITRAMFS_FILE_SIZE" >> "$META_FILE"
+    echo "KERNEL_FILE_SIZE=$KERNEL_FILE_SIZE" >> "$META_FILE"
+}
+
+build_alpine_chroot() {
+    IMAGE_TYPE="$1"
+    IMAGE_VERSION="$2"
+    IMAGE_ARCH="$3"
+    
+    IMAGE_NAME="${IMAGE_TYPE}-${IMAGE_ARCH}-${IMAGE_VERSION}"
+    CHROOT_DIR="$BUILD_DIR/alpine-chroot-${IMAGE_NAME}"
+
+    if [ -d "$CHROOT_DIR" ]; then
+        echo "Chroot directory $CHROOT_DIR already exists" 1>&2
+        return 0
+    fi
+
+    rc-update add qemu-binfmt default
+    rc-service qemu-binfmt start
+
+    mkdir -p "$CHROOT_DIR"
+    if [ $? -ne 0 ]; then
+        echo "Could not create chroot directory $CHROOT_DIR" 1>&2
+        exit -1
+    fi
+
+    mkdir -p "$CHROOT_DIR/etc"
+    cp /etc/resolv.conf $CHROOT_DIR/etc/
+
+    mkdir -p "$CHROOT_DIR/etc/apk"
+    cp /etc/apk/repositories $CHROOT_DIR/etc/apk/
+    
+    apk add  -U --initdb --allow-untrusted \
+        -p $CHROOT_DIR \
+        --arch $IMAGE_ARCH \
+        alpine-base
+    if [ $? -ne 0 ]; then
+        echo "Could not add alpine-base to chroot" 1>&2
+        exit -2
+    fi
+
+    mount -t proc proc $CHROOT_DIR/proc/
+    if [ $? -ne 0 ]; then
+        echo "Could not mount proc" 1>&2
+        exit -3
+    fi
+    mount -t sysfs sys $CHROOT_DIR/sys/
+    if [ $? -ne 0 ]; then
+        echo "Could not mount sys" 1>&2
+        exit -4
+    fi
+    mount -o bind /dev $CHROOT_DIR/dev/
+    if [ $? -ne 0 ]; then
+        echo "Could not mount dev" 1>&2
+        exit -5
+    fi
+    mount -o bind /dev/pts $CHROOT_DIR/dev/pts/
+    if [ $? -ne 0 ]; then
+        echo "Could not mount dev/pts" 1>&2
+        exit -6
+    fi
+    mount -o bind /run $CHROOT_DIR/run/
+    if [ $? -ne 0 ]; then
+        echo "Could not mount run" 1>&2
+        exit -7
+    fi
+    
+    chroot $CHROOT_DIR /bin/sh -c "apk add --no-cache cloud-init cloud-utils e2fsprogs-extra python3 py3-yaml py3-jsonpatch"
+    if [ $? -ne 0 ]; then
+        echo "Could not add cloud-init to chroot" 1>&2
+        exit -8
+    fi
+
+    chroot $CHROOT_DIR /bin/sh -c "setup-cloud-init"
+
+    # chroot $CHROOT_DIR /bin/sh -c "rc-update add cloud-init default"
+    # if [ $? -ne 0 ]; then
+    #     echo "Could not add cloud-init to default" 1>&2
+    #     exit -9
+    # fi
+    # chroot $CHROOT_DIR /bin/sh -c "rc-update add cloud-config default"
+    # if [ $? -ne 0 ]; then
+    #     echo "Could not add cloud-config to default" 1>&2
+    #     exit -10
+    # fi
+    # chroot $CHROOT_DIR /bin/sh -c "rc-update add cloud-final default"
+    # if [ $? -ne 0 ]; then
+    #     echo "Could not add cloud-final to default" 1>&2
+    #     exit -11
+    # fi
+    # chroot $CHROOT_DIR /bin/sh -c "rc-update add cloud-init-local boot"
+    # if [ $? -ne 0 ]; then
+    #     echo "Could not add cloud-init-local to boot" 1>&2
+    #     exit -12
+    # fi
 }
 
 get_alpine_image "$TYPE" "$TITLE" "$ALPINE_VERSION" "$ARCH"
-
-
+build_alpine_chroot "$TYPE" "$ALPINE_VERSION" "$ARCH"
 

@@ -1,15 +1,15 @@
 .PHONY: build clean dist docker-build docker-promote build-scr
 
 ifndef PROJECT
-$(error PROJECT is not set. Usage: $(MAKE) PROJECT=value)
+$(error PROJECT is not set. Usage: $(MAKE) -C u-boot PROJECT=value)
 endif
 
 ifndef BUILD_ROOT
-$(error BUILD_ROOT is not set. Usage: $(MAKE) BUILD_ROOT=value)
+$(error BUILD_ROOT is not set. Usage: $(MAKE) -C u-boot BUILD_ROOT=value)
 endif
 
 ifndef DOWNLOADS_ROOT
-$(error DOWNLOADS_ROOT is not set. Usage: $(MAKE) DOWNLOADS_ROOT=value)
+$(error DOWNLOADS_ROOT is not set. Usage: $(MAKE) -C u-boot DOWNLOADS_ROOT=value)
 endif
 
 CHECKOUT_DIR := $(DOWNLOADS_ROOT)/u-boot

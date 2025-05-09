@@ -65,9 +65,12 @@ $(ALPINE_BUILD)/vmlinuz-virt-x86_64-latest-stable: $(ALPINE_BUILD)
 
 
 build-u-boot: $(UBOOT_BUILD)/u-boot-qemu_arm64-cortex-a72.bin
-build-alpine: $(ALPINE_BUILD)/alpine-rpi-latest-stable-aarch64-vmlinuz $(ALPINE_BUILD)/alpine-virt-latest-stable-aarch64-vmlinuz $(ALPINE_BUILD)/alpine-virt-latest-stable-x86_64-vmlinuz
+build-alpine: $(ALPINE_BUILD)/vmlinuz-rpi-aarch64-latest-stable $(ALPINE_BUILD)/vmlinuz-virt-aarch64-latest-stable $(ALPINE_BUILD)/vmlinuz-virt-x86_64-latest-stable
 
-build: build-u-boot build-alpine
+build-libguestfs: 
+	$(MAKE) -C libguestfs build PROJECT=$(PROJECT) BUILD_ROOT=$(BUILD_ROOT) DOWNLOADS_ROOT=$(DOWNLOADS_ROOT)
+
+build: build-u-boot build-alpine build-libguestfs
 
 
 clean:

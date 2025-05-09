@@ -1,4 +1,4 @@
-.PHONY: init build clean dist docker-build docker-promote get-latest-images scour verify-type verify-title
+.PHONY: init build clean dist docker-build docker-promote get-latest-images scour verify-type verify-title verify-arch verify-alpine-version
 
 CONTAINER_NAME := muffin_alpine
 PROJECT ?= wiggly
@@ -7,15 +7,15 @@ BUILD_ROOT ?= $(realpath ../build)
 CONTAINER_TAG := $(PROJECT)/$(CONTAINER_NAME)
 
 ifndef DOWNLOADS_ROOT
-	$(error DOWNLOADS_ROOT is not set. Usage: $(MAKE) DOWNLOADS_ROOT=value)
+	$(error DOWNLOADS_ROOT is not set. Usage: $(MAKE) -C alpine DOWNLOADS_ROOT=value)
 endif
 
 ifndef BUILD_ROOT
-	$(error BUILD_ROOT is not set. Usage: $(MAKE) BUILD_ROOT=value)
+	$(error BUILD_ROOT is not set. Usage: $(MAKE) -C alpine BUILD_ROOT=value)
 endif
 
 ifndef ALPINE_VERSION
-	$(error ALPINE_VERSION is not set. Usage: $(MAKE) ALPINE_VERSION=value)
+	$(error ALPINE_VERSION is not set. Usage: $(MAKE) -C alpine ALPINE_VERSION=value)
 endif
 
 docker-build:
@@ -45,7 +45,7 @@ verify-alpine-version:
 
 get-alpine-image: verify-type verify-arch verify-alpine-version docker-promote
 
-	docker run --rm \
+	docker run --rm --cap-add=SYS_ADMIN \
 	    -v .:/app \
 		-v $(DOWNLOADS_ROOT):/downloads \
 		-v $(BUILD_ROOT):/build \
