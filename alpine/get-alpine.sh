@@ -52,6 +52,10 @@ ALPINE_BASE_URL="https://dl-cdn.alpinelinux.org/alpine/$ALPINE_VERSION/releases/
 LATEST_RELEASES_YAML="$BUILD_DIR/latest-releases-$ALPINE_VERSION-$ARCH.yaml"
 LATEST_RELEASES_URL="$ALPINE_BASE_URL/latest-releases.yaml"
 
+SYS_LINUX_BASE_URL="https://www.kernel.org/pub/linux/utils/boot/syslinux"
+LATEST_CHECKSUM_FILE="$BUILD_DIR/sha256sums.asc"
+LATEST_CHECKSUM_URL="$SYS_LINUX_BASE_URL/sha256sums.asc"
+
 download_file() {
     wget -O "$2" "$1"
     if [ $? -ne 0 ]; then
@@ -149,6 +153,10 @@ get_alpine_image() {
             echo "ISO image"
             mkdir -p "$UNPACK_DIR"
             bsdtar -xf "$LATEST_IMG_FILE" -C "$UNPACK_DIR"
+            strings "$LATEST_IMG_FILE" | grep -q "isolinux.bin"
+            if [ $? -eq 0 ]; then
+                dd if="$LATEST_IMG_FILE" of="$BUILD_DIR/${UNPACK_NAME}-isohdpfx.bin" bs=1 count=440
+            fi
             ;;
         *)
             echo "Unknown image type: $LATEST_IMG_FILE" 1>&2
@@ -187,7 +195,7 @@ get_alpine_image() {
     KERNEL_OFFSET=$((KERNEL_OFFSET + 1))
     tail -c +$KERNEL_OFFSET "$VMLINUZ_FILE" | gunzip > "$KERNEL_FILE" 2>/dev/null
     KERNEL_FILE_SIZE=`stat -c%s "$KERNEL_FILE"`
-    META_FILE="$BUILD_DIR/meta-${IMAGE_TYPE}-${UNPACK_NAME}.txt"
+    META_FILE="$BUILD_DIR/meta-${UNPACK_NAME}.txt"
     rm -f "$META_FILE"
     echo "IMAGE_TITLE=$IMAGE_TITLE" >> "$META_FILE"
     echo "IMAGE_TYPE=$IMAGE_TYPE" >> "$META_FILE"
@@ -202,7 +210,7 @@ get_alpine_image() {
     echo "KERNEL_FILE_SIZE=$KERNEL_FILE_SIZE" >> "$META_FILE"
 }
 
-build_alpine_chroot() {
+build_alpine_image() {
     IMAGE_TYPE="$1"
     IMAGE_VERSION="$2"
     IMAGE_ARCH="$3"
@@ -224,13 +232,58 @@ build_alpine_chroot() {
         exit -1
     fi
 
+
+    APK_CACHE_DIR="${DOWNLOAD_DIR}/apk-${IMAGE_NAME}"
+    mkdir -p "$APK_CACHE_DIR"
+    if [ $? -ne 0 ]; then
+        echo "Could not create apk cache directory $APK_CACHE_DIR" 1>&2
+        exit -1
+    fi
+
     mkdir -p "$CHROOT_DIR/etc"
     cp /etc/resolv.conf $CHROOT_DIR/etc/
 
     mkdir -p "$CHROOT_DIR/etc/apk"
     cp /etc/apk/repositories $CHROOT_DIR/etc/apk/
-    
-    apk add  -U --initdb --allow-untrusted \
+
+    META_FILE="$BUILD_DIR/meta-${IMAGE_NAME}.txt"
+    if [ ! -f "$META_FILE" ]; then
+        echo "Meta file $META_FILE does not exist" 1>&2
+        exit -1
+    fi
+    source "$META_FILE"
+    echo "$IMAGE_VERSION" > "$CHROOT_DIR/etc/alpine-release"
+
+    ISO_FILE="$BUILD_DIR/alpine-${IMAGE_NAME}.iso"
+    if [ -f "$ISO_FILE" ]; then
+        echo "ISO file $ISO_FILE already exists" 1>&2
+        return 0
+    fi
+
+    ORIGINAL_ISO_DIR="$BUILD_DIR/$IMAGE_NAME"
+    if [ ! -d "$ORIGINAL_ISO_DIR" ]; then
+        echo "Original iso directory $ORIGINAL_ISO_DIR does not exist" 1>&2
+        exit -1
+    fi
+
+    mkdir -p "$CHROOT_DIR/boot"
+    if [ -d "$ORIGINAL_ISO_DIR/boot/syslinux" ]; then
+        cp -a "$ORIGINAL_ISO_DIR/boot/syslinux" "$CHROOT_DIR/boot/syslinux"
+    fi
+
+    if [ -d "$ORIGINAL_ISO_DIR/boot/grub" ]; then
+        cp -a "$ORIGINAL_ISO_DIR/boot/grub" "$CHROOT_DIR/boot/grub"
+    fi
+
+    if [ -d "$ORIGINAL_ISO_DIR/efi" ]; then
+        cp -a "$ORIGINAL_ISO_DIR/efi" "$CHROOT_DIR/efi"
+    fi
+
+    if [ -d "$ORIGINAL_ISO_DIR/apks" ]; then
+        cp -a "$ORIGINAL_ISO_DIR/apks" "$CHROOT_DIR/apks"
+    fi
+
+    apk --cache-dir add  -U --initdb --allow-untrusted \
         -p $CHROOT_DIR \
         --arch $IMAGE_ARCH \
         alpine-base
@@ -264,6 +317,18 @@ build_alpine_chroot() {
         echo "Could not mount run" 1>&2
         exit -7
     fi
+
+    mkdir -p "$CHROOT_DIR/etc/apk/cache"
+    if [ $? -ne 0 ]; then
+        echo "Could not create apk cache directory $CHROOT_DIR/etc/apk/cache" 1>&2
+        exit -8
+    fi
+
+    mount --bind "$APK_CACHE_DIR" "$CHROOT_DIR/etc/apk/cache"
+    if [ $? -ne 0 ]; then
+        echo "Could not mount apk cache directory $APK_CACHE_DIR" 1>&2
+        exit -8
+    fi
     
     chroot $CHROOT_DIR /bin/sh -c "apk add --no-cache cloud-init cloud-utils e2fsprogs-extra python3 py3-yaml py3-jsonpatch"
     if [ $? -ne 0 ]; then
@@ -273,28 +338,44 @@ build_alpine_chroot() {
 
     chroot $CHROOT_DIR /bin/sh -c "setup-cloud-init"
 
-    # chroot $CHROOT_DIR /bin/sh -c "rc-update add cloud-init default"
-    # if [ $? -ne 0 ]; then
-    #     echo "Could not add cloud-init to default" 1>&2
-    #     exit -9
-    # fi
-    # chroot $CHROOT_DIR /bin/sh -c "rc-update add cloud-config default"
-    # if [ $? -ne 0 ]; then
-    #     echo "Could not add cloud-config to default" 1>&2
-    #     exit -10
-    # fi
-    # chroot $CHROOT_DIR /bin/sh -c "rc-update add cloud-final default"
-    # if [ $? -ne 0 ]; then
-    #     echo "Could not add cloud-final to default" 1>&2
-    #     exit -11
-    # fi
-    # chroot $CHROOT_DIR /bin/sh -c "rc-update add cloud-init-local boot"
-    # if [ $? -ne 0 ]; then
-    #     echo "Could not add cloud-init-local to boot" 1>&2
-    #     exit -12
-    # fi
+    umount $CHROOT_DIR/proc/
+    umount $CHROOT_DIR/sys/
+    umount $CHROOT_DIR/dev/pts/
+    umount $CHROOT_DIR/dev/
+    umount $CHROOT_DIR/run/
+
+
+
+    EFI_IMG_OPTIONS=""
+    if [ -f "$CHROOT_DIR/boot/grub/efi.img" ]; then
+        EFI_IMG_OPTIONS="-eltorito-alt-boot -e /boot/grub/efi.img -no-emul-boot"
+    fi
+
+    ISOHYBRID_MBR_OPTION=""
+    if [ -f "$CHROOT_DIR/boot/syslinux/isohdpfx.bin" ]; then
+        ISOHYBRID_MBR_OPTION="-isohybrid-mbr $CHROOT_DIR/boot/syslinux/isohdpfx.bin -no-emul-boot -boot-load-size 4 -boot-info-table"
+    fi
+
+    ISOLINUX_OPTION=""
+    if [ -f "$CHROOT_DIR/boot/syslinux/isolinux.bin" ]; then
+        ISOLINUX_OPTION="-b /boot/syslinux/isolinux.bin"
+    fi
+
+    xorriso -as mkisofs \
+        -o "$ISO_FILE" \
+        $ISOHYBRID_MBR_OPTION \
+        -c boot.catalog \
+        -partition_offset 16 \
+        $ISOLINUX_OPTION \
+        $EFI_IMG_OPTIONS \
+        -isohybrid-gpt-basdat \
+        -isohybrid-apm-hfsplus \
+        -R -J -V "ALPINE_ROOT" \
+        "$CHROOT_DIR"
+
 }
 
 get_alpine_image "$TYPE" "$TITLE" "$ALPINE_VERSION" "$ARCH"
-build_alpine_chroot "$TYPE" "$ALPINE_VERSION" "$ARCH"
+
+build_alpine_image "$TYPE" "$ALPINE_VERSION" "$ARCH"
 
