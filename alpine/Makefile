@@ -50,7 +50,7 @@ get-alpine-image: verify-type verify-arch verify-alpine-version docker-promote
 		-v $(DOWNLOADS_ROOT):/downloads \
 		-v $(BUILD_ROOT):/build \
 		$(CONTAINER_TAG):build \
-		/bin/sh -c "cd /app && BUILD_DIR=/build DOWNLOAD_DIR=/downloads TYPE='$(TYPE)' TITLE='$(TITLE)' ALPINE_VERSION='$(ALPINE_VERSION)' ARCH='$(ARCH)' bash ./get-alpine.sh"
+		/bin/sh -c -x "cd /app && BUILD_DIR=/build DOWNLOAD_DIR=/downloads TYPE='$(TYPE)' TITLE='$(TITLE)' ALPINE_VERSION='$(ALPINE_VERSION)' ARCH='$(ARCH)' bash -x ./get-alpine.sh"
 
 
 build: init docker-promote verify-type verify-arch
