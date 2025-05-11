@@ -67,11 +67,7 @@ $(ALPINE_BUILD)/vmlinuz-virt-x86_64-latest-stable: $(ALPINE_BUILD)
 build-u-boot: $(UBOOT_BUILD)/u-boot-qemu_arm64-cortex-a72.bin
 build-alpine: $(ALPINE_BUILD)/vmlinuz-rpi-aarch64-latest-stable $(ALPINE_BUILD)/vmlinuz-virt-aarch64-latest-stable $(ALPINE_BUILD)/vmlinuz-virt-x86_64-latest-stable
 
-build-libguestfs: 
-	$(MAKE) -C libguestfs build PROJECT=$(PROJECT) BUILD_ROOT=$(BUILD_ROOT) DOWNLOADS_ROOT=$(DOWNLOADS_ROOT)
-
-build: build-u-boot build-alpine build-libguestfs
-
+build: build-u-boot build-alpine
 
 clean:
 	$(MAKE) -C u-boot clean PROJECT=$(PROJECT) BUILD_ROOT=$(BUILD_ROOT) DIST_ROOT=$(DIST_ROOT) UBOOT_REPO=$(UBOOT_REPO)
@@ -99,13 +95,13 @@ alpine-dist: init
 	$(MAKE) -C alpine dist PROJECT=$(PROJECT) BUILD_ROOT=$(BUILD_ROOT) DIST_ROOT=$(DIST_ROOT)
 
 qemu: init
-	$(MAKE) -C qemu build PROJECT=$(PROJECT) BUILD_ROOT=$(BUILD_ROOT) DIST_ROOT=$(DIST_ROOT)	
+	$(MAKE) -C qemu build PROJECT=$(PROJECT) BUILD_ROOT=$(BUILD_ROOT) DOWNLOADS_ROOT=$(DOWNLOADS_ROOT)	
 
 u-boot-build-scr: init
-	$(MAKE) -C u-boot build-scr PROJECT=$(PROJECT) BUILD_ROOT=$(BUILD_ROOT) DIST_ROOT=$(DIST_ROOT)
+	$(MAKE) -C u-boot build-scr PROJECT=$(PROJECT) BUILD_ROOT=$(UBOOT_BUILD) DOWNLOADS_ROOT=$(DOWNLOADS_ROOT)
 
-run-qemu: dist
-	$(MAKE) -C qemu run PROJECT=$(PROJECT) BUILD_ROOT=$(BUILD_ROOT) DIST_ROOT=$(DIST_ROOT) TFTP_DIST=$(TFTP_DIST)
+run-qemu:
+	$(MAKE) -C qemu run PROJECT=$(PROJECT) BUILD_ROOT=$(QEMU_BUILD) ALPINE_BUILD=$(ALPINE_BUILD) UBOOT_BUILD=$(UBOOT_BUILD) TFTP_DIST=$(TFTP_DIST) DOWNLOADS_ROOT=$(DOWNLOADS_ROOT)
 
 create-qcow2:
 	if [ -z "$(TARGET_FILE)" ]; then \
