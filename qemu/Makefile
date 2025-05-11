@@ -1,16 +1,31 @@
 .PHONY: build clean dist docker-build docker-promote create-qcow2 run
 
-BUILD_ROOT ?= $(realpath ../build)
-DIST_ROOT ?= $(realpath ../dist)
-TFTP_DIST ?= $(DIST_ROOT)/tftp
+ifndef DOWNLOADS_ROOT
+	$(error DOWNLOADS_ROOT is not set. Usage: $(MAKE) -C alpine DOWNLOADS_ROOT=value)
+endif
+
+ifndef BUILD_ROOT
+	$(error BUILD_ROOT is not set. Usage: $(MAKE) -C alpine BUILD_ROOT=value)
+endif
+
+ifndef ALPINE_BUILD
+	$(error ALPINE_BUILD is not set. Usage: $(MAKE) -C alpine ALPINE_BUILD=value)
+endif
+
+ifndef UBOOT_BUILD
+	$(error UBOOT_BUILD is not set. Usage: $(MAKE) -C u-boot UBOOT_BUILD=value)
+endif
+
+ifndef TFTP_DIST
+	$(error TFTP_DIST is not set. Usage: $(MAKE) -C qemu TFTP_DIST=value)
+endif
+
 
 CONTAINER_NAME := muffin_qemu
 PROJECT ?= wiggly
 
-WORKING_DIR := $(BUILD_ROOT)/qemu
-ALPINE_DIR := $(BUILD_ROOT)/alpine
-UBOOT_DIR := $(BUILD_ROOT)/u-boot
-CHECKOUT_DIR := $(WORKING_DIR)/checkout
+ALPINE_DIR ?= $(BUILD_ROOT)/alpine
+UBOOT_DIR ?= $(BUILD_ROOT)/u-boot
 
 CONTAINER_TAG := $(PROJECT)/$(CONTAINER_NAME)
 
@@ -38,10 +53,11 @@ run: docker-promote
 	ls -l $(WORKING_DIR)
 
 	docker run -it --rm \
-		-v $(WORKING_DIR):/build \
-		-v $(ALPINE_DIR):/alpine \
-		-v $(UBOOT_DIR):/u-boot \
+		-v $(BUILD_ROOT):/build \
+		-v $(ALPINE_BUILD):/alpine \
+		-v $(UBOOT_BUILD):/u-boot \
 		-v $(TFTP_DIST):/tftp \
+		-v $(DOWNLOADS_ROOT):/downloads \
 		$(CONTAINER_TAG):build \
 		qemu-system-aarch64 \
 			-d guest_errors \
@@ -51,18 +67,16 @@ run: docker-promote
 			-nographic \
 			-device virtio-net-device,id=net0dev,netdev=net0 \
 			-netdev user,id=net0,tftp=/tftp,bootfile=u-boot.scr \
-			-drive file=/build/virt-hd0.qcow2,media=disk,format=qcow2 \
+			-drive file=/alpine/alpine-virt-aarch64-latest-stable.iso,media=cdrom \
 			-bios /u-boot/u-boot-qemu_arm64-cortex-a72.bin 
 
+      
 build: docker-promote 
 	@echo "Stub: Building QEMU disk images..."
 
 clean:
 	@echo "Stub: Cleaning QEMU images..."
-	rm -rf $(WORKING_DIR)
-	rm -rf $(DIST_ROOT)/qemu
 
 dist:
 	@echo "Stub: Installing QEMU artifacts to dist/..."
-	mkdir -p $(DIST_ROOT)/qemu
-	cp $(WORKING_DIR)/*.dtb $(TFTP_DIST)/
+
