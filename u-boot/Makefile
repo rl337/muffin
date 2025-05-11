@@ -98,16 +98,17 @@ build-scr:
 	INITRD_ADDR=0x42D00000 \
 	INITRD_IMAGE=initramfs-virt-3.21.3 \
 	INITRD_SIZE=$$(printf '0x%08X' 9433213) \
-	BOOTARGS="console=ttyAMA0 earlycon root=/dev/vda1" \
+	BOOTARGS="console=ttyAMA0 earlycon overlaytmpfs=yes debug verbose" \
 		envsubst '$$KERNEL_IMAGE $$KERNEL_ADDR $$INITRD_IMAGE $$INITRD_ADDR $$INITRD_SIZE $$BOOTARGS' < \
-		    ./u-boot.cmd.in > $(WORKING_DIR)/u-boot.cmd
+			./u-boot.cmd.in > $(BUILD_ROOT)/u-boot.cmd
 	
 	docker run --rm \
-		-v $(WORKING_DIR):/build \
+		-v $(BUILD_ROOT):/build \
+		-v $(CHECKOUT_DIR):/checkout \
 		$(CONTAINER_TAG):build \
 		/bin/sh -c "\
-			cd /build && \
-			/build/checkout/u-boot/tools/mkimage \
+			cd /checkout/u-boot/tools && \
+			/checkout/u-boot/tools/mkimage \
 				-A arm64 \
 				-T script \
 				-C none \
@@ -122,5 +123,5 @@ clean:
 
 dist:
 	mkdir -p $(DIST_ROOT)/u-boot
-	cp $(BUILD_ROOT)/u-boot/u-boot-*.bin $(DIST_ROOT)/u-boot/ || true
-	cp $(BUILD_ROOT)/u-boot/config-* $(DIST_ROOT)/u-boot/ || true
+	cp $(BUILD_ROOT)/u-boot-*.bin $(DIST_ROOT)/u-boot/ || true
+	cp $(BUILD_ROOT)/config-* $(DIST_ROOT)/u-boot/ || true
