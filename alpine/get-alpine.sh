@@ -283,6 +283,13 @@ build_alpine_image() {
         cp -a "$ORIGINAL_ISO_DIR/apks" "$CHROOT_DIR/apks"
     fi
 
+    # create mount point for modloop 
+    mkdir -p "$CHROOT_DIR/lib/modules"
+    # echo "modloop" > "$CHROOT_DIR/lib/modules/placeholder"
+    if [ -f "$ORIGINAL_ISO_DIR/boot/modloop-${IMAGE_TYPE}" ]; then
+        cp -a "$ORIGINAL_ISO_DIR/boot/modloop-${IMAGE_TYPE}" "$CHROOT_DIR/boot"
+    fi
+
     apk --cache-dir add  -U --initdb --allow-untrusted \
         -p $CHROOT_DIR \
         --arch $IMAGE_ARCH \
