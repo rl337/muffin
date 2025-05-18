@@ -54,6 +54,13 @@ downloads: $(DOWNLOADS_ROOT)
 $(UBOOT_BUILD)/u-boot-qemu_arm64-cortex-a72.bin: $(UBOOT_BUILD)
 	$(MAKE) -C u-boot build PROJECT=$(PROJECT) DOWNLOADS_ROOT=$(DOWNLOADS_ROOT) BUILD_ROOT=$(UBOOT_BUILD) UBOOT_CONF=qemu_arm64 CPU=cortex-a72
 
+$(UBOOT_BUILD)/u-boot-rpi_4-cortex-a72.bin: $(UBOOT_BUILD)
+	$(MAKE) -C u-boot build PROJECT=$(PROJECT) DOWNLOADS_ROOT=$(DOWNLOADS_ROOT) BUILD_ROOT=$(UBOOT_BUILD) UBOOT_CONF=rpi_4 CPU=cortex-a72
+
+$(UBOOT_BUILD)/u-boot-rpi_4-cortex-a72.img: $(UBOOT_BUILD)/u-boot-rpi_4-cortex-a72.bin
+	dd if=/dev/zero of=$(UBOOT_BUILD)/u-boot-rpi_4-cortex-a72.img bs=1M count=4
+	dd if=$(UBOOT_BUILD)/u-boot-rpi_4-cortex-a72.bin of=$(UBOOT_BUILD)/u-boot-rpi_4-cortex-a72.img bs=1 conv=notrunc
+
 $(ALPINE_BUILD)/vmlinuz-rpi-aarch64-latest-stable: $(ALPINE_BUILD)
 	$(MAKE) -C alpine build PROJECT=$(PROJECT) DOWNLOADS_ROOT=$(DOWNLOADS_ROOT) BUILD_ROOT=$(ALPINE_BUILD) ALPINE_VERSION=latest-stable ARCH=aarch64 TYPE=rpi TITLE="Raspberry Pi Disk Image"
 
@@ -64,8 +71,14 @@ $(ALPINE_BUILD)/vmlinuz-virt-x86_64-latest-stable: $(ALPINE_BUILD)
 	$(MAKE) -C alpine build PROJECT=$(PROJECT) DOWNLOADS_ROOT=$(DOWNLOADS_ROOT) BUILD_ROOT=$(ALPINE_BUILD) ALPINE_VERSION=latest-stable ARCH=x86_64 TYPE=virt TITLE="Virtual"
 
 
-build-u-boot: $(UBOOT_BUILD)/u-boot-qemu_arm64-cortex-a72.bin
-build-alpine: $(ALPINE_BUILD)/vmlinuz-rpi-aarch64-latest-stable $(ALPINE_BUILD)/vmlinuz-virt-aarch64-latest-stable $(ALPINE_BUILD)/vmlinuz-virt-x86_64-latest-stable
+build-u-boot: \
+	$(UBOOT_BUILD)/u-boot-qemu_arm64-cortex-a72.bin \
+	$(UBOOT_BUILD)/u-boot-rpi_4-cortex-a72.img
+
+build-alpine: \
+    $(ALPINE_BUILD)/vmlinuz-rpi-aarch64-latest-stable \
+    $(ALPINE_BUILD)/vmlinuz-virt-aarch64-latest-stable \
+    $(ALPINE_BUILD)/vmlinuz-virt-x86_64-latest-stable
 
 build: build-u-boot build-alpine
 
@@ -102,6 +115,9 @@ u-boot-build-scr: init
 
 run-qemu:
 	$(MAKE) -C qemu run PROJECT=$(PROJECT) BUILD_ROOT=$(QEMU_BUILD) ALPINE_BUILD=$(ALPINE_BUILD) UBOOT_BUILD=$(UBOOT_BUILD) TFTP_DIST=$(TFTP_DIST) DOWNLOADS_ROOT=$(DOWNLOADS_ROOT)
+
+run-qemu-rpi:
+	$(MAKE) -C qemu run-rpi PROJECT=$(PROJECT) BUILD_ROOT=$(QEMU_BUILD) ALPINE_BUILD=$(ALPINE_BUILD) UBOOT_BUILD=$(UBOOT_BUILD) TFTP_DIST=$(TFTP_DIST) DOWNLOADS_ROOT=$(DOWNLOADS_ROOT)
 
 create-qcow2:
 	if [ -z "$(TARGET_FILE)" ]; then \
