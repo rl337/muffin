@@ -1,4 +1,4 @@
-.PHONY: build clean dist docker-build docker-promote build-scr
+.PHONY: build clean dist docker-build docker-promote
 
 ifndef PROJECT
 $(error PROJECT is not set. Usage: $(MAKE) -C u-boot PROJECT=value)
@@ -51,6 +51,67 @@ verify-cpu:
 		exit 1; \
 	fi
 
+verify-transfer-command:
+	@if [ -z "$(TRANSFER_COMMAND)" ]; then \
+		echo "TRANSFER_COMMAND is not set"; \
+		exit 1; \
+	fi
+
+verify-server-ip:
+	@if [ -z "$(SERVER_IP)" ]; then \
+		echo "SERVER_IP is not set"; \
+		exit 1; \
+	fi
+
+verify-kernel-image:
+	@if [ -z "$(KERNEL_IMAGE)" ]; then \
+		echo "KERNEL_IMAGE is not set"; \
+		exit 1; \
+	fi
+
+verify-kernel-addr:
+	@if [ -z "$(KERNEL_ADDR)" ]; then \
+		echo "KERNEL_ADDR is not set"; \
+		exit 1; \
+	fi
+
+verify-initrd-image:
+	@if [ -z "$(INITRD_IMAGE)" ]; then \
+		echo "INITRD_IMAGE is not set"; \
+		exit 1; \
+	fi
+
+
+verify-initrd-addr:
+	@if [ -z "$(INITRD_ADDR)" ]; then \
+		echo "INITRD_ADDR is not set"; \
+		exit 1; \
+	fi
+
+verify-initrd-size:
+	@if [ -z "$(INITRD_SIZE)" ]; then \
+		echo "INITRD_SIZE is not set"; \
+		exit 1; \
+	fi
+
+verify-script-addr:
+	@if [ -z "$(SCRIPT_ADDR)" ]; then \
+		echo "SCRIPT_ADDR is not set"; \
+		exit 1; \
+	fi
+
+verify-script-name:
+	@if [ -z "$(UBOOT_SCRIPT)" ]; then \
+		echo "UBOOT_SCRIPT is not set"; \
+		exit 1; \
+	fi
+
+verify-bootargs:
+	@if [ -z "$(BOOTARGS)" ]; then \
+		echo "BOOTARGS is not set"; \
+		exit 1; \
+	fi
+
 init: $(CHECKOUT_DIR)
 
 docker-build:
@@ -59,8 +120,12 @@ docker-build:
 docker-promote: docker-build
 	docker tag $(CONTAINER_TAG):latest $(CONTAINER_TAG):build
 
-$(UBOOT_CONFIGS_DIR)/$(UBOOT_CONF)_$(PROJECT)_defconfig:
-	UBOOT_SCRIPT="u-boot.scr" envsubst < defconf_append.in > $(BUILD_ROOT)/defconf_append
+$(UBOOT_CONFIGS_DIR)/$(UBOOT_CONF)_$(PROJECT)_defconfig: verify-transfer-command verify-server-ip verify-script-addr verify-script-name
+	UBOOT_SCRIPT="${UBOOT_SCRIPT}" \
+	    TRANSFER_COMMAND="${TRANSFER_COMMAND}" \
+	    SERVER_IP="${SERVER_IP}" \
+	    SCRIPT_ADDR="${SCRIPT_ADDR}" \
+	    envsubst < defconf_append.in > $(BUILD_ROOT)/defconf_append
 	cp $(CHECKOUT_DIR)/u-boot/configs/$(UBOOT_CONF)_defconfig $(CHECKOUT_DIR)/u-boot/configs/$(UBOOT_CONF)_$(PROJECT)_defconfig
 	cat $(BUILD_ROOT)/defconf_append >> $(CHECKOUT_DIR)/u-boot/configs/$(UBOOT_CONF)_$(PROJECT)_defconfig
 
@@ -92,15 +157,15 @@ endif
 
 
 
-build-scr:
-	KERNEL_IMAGE=vmlinuz-virt-3.21.3 \
-	KERNEL_ADDR=0x40200000 \
-	INITRD_ADDR=0x42D00000 \
-	INITRD_IMAGE=initramfs-virt-3.21.3 \
-	INITRD_SIZE=$$(printf '0x%08X' 9433213) \
-	BOOTARGS="console=ttyAMA0 earlycon overlaytmpfs=yes debug verbose" \
+build-scr: verify-kernel-image verify-kernel-addr verify-initrd-image verify-initrd-addr verify-initrd-size verify-script-name verify-bootargs
+	KERNEL_IMAGE=$(KERNEL_IMAGE) \
+	KERNEL_ADDR=$(KERNEL_ADDR) \
+	INITRD_ADDR=$(INITRD_ADDR) \
+	INITRD_IMAGE=$(INITRD_IMAGE) \
+	INITRD_SIZE=$(INITRD_SIZE) \
+	BOOTARGS="$(BOOTARGS)" \
 		envsubst '$$KERNEL_IMAGE $$KERNEL_ADDR $$INITRD_IMAGE $$INITRD_ADDR $$INITRD_SIZE $$BOOTARGS' < \
-			./u-boot.cmd.in > $(BUILD_ROOT)/u-boot.cmd
+			./u-boot.cmd.in > $(BUILD_ROOT)/$(UBOOT_SCRIPT).cmd
 	
 	docker run --rm \
 		-v $(BUILD_ROOT):/build \
@@ -113,8 +178,8 @@ build-scr:
 				-T script \
 				-C none \
 				-n 'U-Boot script' \
-				-d /build/u-boot.cmd \
-				/build/u-boot.scr"
+				-d /build/$(UBOOT_SCRIPT).cmd \
+				/build/$(UBOOT_SCRIPT)"
 
 
 clean:

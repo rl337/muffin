@@ -18,6 +18,10 @@ ifndef ALPINE_VERSION
 	$(error ALPINE_VERSION is not set. Usage: $(MAKE) -C alpine ALPINE_VERSION=value)
 endif
 
+ifndef BASE_HTTP_URL
+	$(error BASE_HTTP_URL is not set. Usage: $(MAKE) -C alpine BASE_HTTP_URL=value)
+endif
+
 docker-build:
 	docker build -t $(CONTAINER_TAG):latest .
 
@@ -50,7 +54,7 @@ get-alpine-image: verify-type verify-arch verify-alpine-version docker-promote
 		-v $(DOWNLOADS_ROOT):/downloads \
 		-v $(BUILD_ROOT):/build \
 		$(CONTAINER_TAG):build \
-		/bin/sh -c -x "cd /app && BUILD_DIR=/build DOWNLOAD_DIR=/downloads TYPE='$(TYPE)' TITLE='$(TITLE)' ALPINE_VERSION='$(ALPINE_VERSION)' ARCH='$(ARCH)' bash -x ./get-alpine.sh"
+		/bin/sh -c -x "cd /app && BASE_HTTP_URL='$(BASE_HTTP_URL)' BUILD_DIR=/build DOWNLOAD_DIR=/downloads TYPE='$(TYPE)' TITLE='$(TITLE)' ALPINE_VERSION='$(ALPINE_VERSION)' ARCH='$(ARCH)' bash -x ./get-alpine.sh"
 
 
 build: init docker-promote verify-type verify-arch

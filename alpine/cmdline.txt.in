@@ -1,0 +1,1 @@
+modules=loop,squashfs console=ttyAMA0,115200 ip=dhcp alpine_repo=${ALPINE_REPO_URL} modloop=${MODLOOP_URL}

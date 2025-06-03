@@ -1,24 +1,20 @@
 setenv kernel_addr ${KERNEL_ADDR}
-setenv kernel_size ${KERNEL_SIZE}
-setexpr kernel_end ${kernel_addr} + ${kernel_size}
 
 setenv initrd_addr ${INITRD_ADDR}
 setenv initrd_size ${INITRD_SIZE}
 setexpr initrd_end ${initrd_addr} + ${initrd_size}
 setenv initrd_end 0x${initrd_end} # necessary because fd set requires a 0x prefix
-
+setenv fdt_addr 0x30000000
 setenv bootargs "${BOOTARGS}"
 
 tftpboot ${kernel_addr} ${KERNEL_IMAGE}
 tftpboot ${initrd_addr} ${INITRD_IMAGE}
+tftpboot ${fdt_addr} bcm2711-rpi-4-b.dtb
 
-fdt addr $fdtcontroladdr
+fdt addr ${fdt_addr}
 fdt resize
-fdt set /chosen bootargs "console=ttyAMA0 root=/dev/vda"
+fdt set /chosen bootargs "${bootargs}"
 fdt set /chosen linux,initrd-start <${initrd_addr}>
 fdt set /chosen linux,initrd-end <${initrd_end}>
-fdt print /chosen
 
-printenv
-
-bootefi ${kernel_addr} $fdtcontroladdr
+booti ${kernel_addr} - ${fdt_addr}

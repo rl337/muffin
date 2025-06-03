@@ -30,12 +30,22 @@ if [ -z "$TYPE" ]; then
     exit -5
 fi
 
+if [ -z "$BASE_HTTP_URL" ]; then
+    echo "BASE_HTTP_URL is not set" 1>&2
+    exit -6
+fi
+
+KERNEL_SUFFIX="$TYPE"
 case "$TYPE" in
     virt)
         TITLE="Virtual"
         ;;
     rpi)
         TITLE="Raspberry Pi Disk Image"
+        ;;
+    uboot)
+        TITLE="Generic U-Boot"
+        KERNEL_SUFFIX="lts"
         ;;
     *)
         echo "TYPE $TYPE is not supported" 1>&2
@@ -103,6 +113,54 @@ extract_partitions() {
     echo "LINUX_PARTITION=$LINUX_PARTITION"
 }
 
+get_netboot_files() {
+    IMAGE_TYPE="$1"
+    IMAGE_VERSION="$2"
+    IMAGE_ARCH="$3"
+
+    NETBOOT_BASE_URL="$ALPINE_BASE_URL/netboot"
+    UNPACK_NAME="${IMAGE_TYPE}-${IMAGE_ARCH}-${IMAGE_VERSION}"
+    UNPACK_DIR="$BUILD_DIR/$UNPACK_NAME"
+
+    if [ ! -d "$UNPACK_DIR" ]; then
+        echo "Unpack directory $UNPACK_DIR does not exist" 1>&2
+        mkdir -p "$UNPACK_DIR"
+    fi
+
+    KERNEL_NAME="vmlinuz-${UNPACK_NAME}"
+    KERNEL_FILE="$UNPACK_DIR/$KERNEL_NAME"
+    find "$KERNEL_FILE" -ctime +7 -print
+    if [ $? -ne 0 ];  then
+        download_file "$NETBOOT_BASE_URL/vmlinuz-${IMAGE_TYPE}" "$KERNEL_FILE"
+    fi
+    
+    INITRAMFS_NAME="initramfs-${UNPACK_NAME}"
+    INITRAMFS_FILE="$UNPACK_DIR/$INITRAMFS_NAME"
+    find "$INITRAMFS_FILE" -ctime +7 -print
+    if [ $? -ne 0 ];  then
+        download_file "$NETBOOT_BASE_URL/initramfs-${IMAGE_TYPE}" "$INITRAMFS_FILE"
+    fi
+
+    MODLOOP_NAME="modloop-${UNPACK_NAME}"
+    MODLOOP_FILE="$UNPACK_DIR/$MODLOOP_NAME"
+    find "$MODLOOP_FILE" -ctime +7 -print
+    if [ $? -ne 0 ];  then
+        download_file "$NETBOOT_BASE_URL/modloop-${IMAGE_TYPE}" "$MODLOOP_FILE"
+    fi
+
+    KERNEL_FILE=${KERNEL_NAME} \
+	    INITRAMFS_FILE=${INITRAMFS_NAME} \
+	    envsubst < config.txt.in > "$UNPACK_DIR/config.txt"
+
+    ALPINE_REPO_URL="${BASE_HTTP_URL}/apks"
+    MODLOOP_URL="${BASE_HTTP_URL}/${MODLOOP_NAME}"
+    KERNEL_FILE=${KERNEL_NAME} \
+	    ALPINE_REPO_URL=${ALPINE_REPO_URL} \
+	    MODLOOP_URL=${MODLOOP_URL} \
+	    envsubst < cmdline.txt.in > "$UNPACK_DIR/cmdline.txt"
+}
+
+
 get_alpine_image() {
     IMAGE_TYPE="$1"
     IMAGE_TITLE="$2"
@@ -149,6 +207,15 @@ get_alpine_image() {
             mkdir -p "$UNPACK_DIR"
             mcopy -i "$IMG_FILE_UNCOMPRESSED" ::boot/* "$UNPACK_DIR"
             ;;
+        *.tar.gz)
+            echo "tar.gz image"
+            mkdir -p "$UNPACK_DIR"
+            tar -xf "$LATEST_IMG_FILE" -C "$UNPACK_DIR"
+            strings "$LATEST_IMG_FILE" | grep -q "isolinux.bin"
+            if [ $? -eq 0 ]; then
+                dd if="$LATEST_IMG_FILE" of="$BUILD_DIR/${UNPACK_NAME}-isohdpfx.bin" bs=1 count=440
+            fi
+            ;;
         *.iso)
             echo "ISO image"
             mkdir -p "$UNPACK_DIR"
@@ -165,22 +232,22 @@ get_alpine_image() {
     esac
 
     VMLINUZ_FILE="$BUILD_DIR/vmlinuz-${UNPACK_NAME}"
-    if [ -f "$UNPACK_DIR/boot/vmlinuz-${IMAGE_TYPE}" ]; then
-        cp "$UNPACK_DIR/boot/vmlinuz-${IMAGE_TYPE}" "$VMLINUZ_FILE"
-    elif [ -f "$UNPACK_DIR/vmlinuz-${IMAGE_TYPE}" ]; then
-        cp "$UNPACK_DIR/vmlinuz-${IMAGE_TYPE}" "$VMLINUZ_FILE"
+    if [ -f "$UNPACK_DIR/boot/vmlinuz-${KERNEL_SUFFIX}" ]; then
+        cp "$UNPACK_DIR/boot/vmlinuz-${KERNEL_SUFFIX}" "$VMLINUZ_FILE"
+    elif [ -f "$UNPACK_DIR/vmlinuz-${KERNEL_SUFFIX}" ]; then
+        cp "$UNPACK_DIR/vmlinuz-${KERNEL_SUFFIX}" "$VMLINUZ_FILE"
     else
-        echo "vmlinuz-${IMAGE_TYPE} not found in $UNPACK_NAME" 1>&2
+        echo "vmlinuz-${KERNEL_SUFFIX} not found in $UNPACK_NAME" 1>&2
         exit -1
     fi
     VMLINUZ_FILE_SIZE=`stat -c%s "$VMLINUZ_FILE"`
     INITRAMFS_FILE="$BUILD_DIR/initramfs-${UNPACK_NAME}"
-    if [ -f "$UNPACK_DIR/boot/initramfs-${IMAGE_TYPE}" ]; then
-        cp "$UNPACK_DIR/boot/initramfs-${IMAGE_TYPE}" "$INITRAMFS_FILE"
-    elif [ -f "$UNPACK_DIR/initramfs-${IMAGE_TYPE}" ]; then
-        cp "$UNPACK_DIR/initramfs-${IMAGE_TYPE}" "$INITRAMFS_FILE"
+    if [ -f "$UNPACK_DIR/boot/initramfs-${KERNEL_SUFFIX}" ]; then
+        cp "$UNPACK_DIR/boot/initramfs-${KERNEL_SUFFIX}" "$INITRAMFS_FILE"
+    elif [ -f "$UNPACK_DIR/initramfs-${KERNEL_SUFFIX}" ]; then
+        cp "$UNPACK_DIR/initramfs-${KERNEL_SUFFIX}" "$INITRAMFS_FILE"
     else
-        echo "initramfs-${IMAGE_TYPE} not found in $UNPACK_NAME" 1>&2
+        echo "initramfs-${KERNEL_SUFFIX} not found in $UNPACK_NAME" 1>&2
         exit -1
     fi
     INITRAMFS_FILE_SIZE=`stat -c%s "$INITRAMFS_FILE"`
@@ -382,7 +449,9 @@ build_alpine_image() {
 
 }
 
-get_alpine_image "$TYPE" "$TITLE" "$ALPINE_VERSION" "$ARCH"
-
-build_alpine_image "$TYPE" "$ALPINE_VERSION" "$ARCH"
+if [ "$TYPE" = "rpi" ]; then
+    get_netboot_files "$TYPE" "$ALPINE_VERSION" "$ARCH"
+else
+    get_alpine_image "$TYPE" "$TITLE" "$ALPINE_VERSION" "$ARCH"
+fi
 
