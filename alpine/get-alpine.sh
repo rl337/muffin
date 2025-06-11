@@ -135,11 +135,13 @@ get_netboot_files() {
     fi
     
     INITRAMFS_NAME="initramfs-${UNPACK_NAME}"
+    NEW_INITRAMFS_NAME="initramfs-repack-${UNPACK_NAME}"
     INITRAMFS_FILE="$UNPACK_DIR/$INITRAMFS_NAME"
     find "$INITRAMFS_FILE" -ctime +7 -print
     if [ $? -ne 0 ];  then
         download_file "$NETBOOT_BASE_URL/initramfs-${IMAGE_TYPE}" "$INITRAMFS_FILE"
     fi
+    NEW_INITRAMFS_FILE="$BUILD_DIR/$NEW_INITRAMFS_NAME"
 
     MODLOOP_NAME="modloop-${UNPACK_NAME}"
     MODLOOP_FILE="$UNPACK_DIR/$MODLOOP_NAME"
@@ -149,7 +151,7 @@ get_netboot_files() {
     fi
 
     KERNEL_FILE=${KERNEL_NAME} \
-	    INITRAMFS_FILE=${INITRAMFS_NAME} \
+	    INITRAMFS_FILE=${NEW_INITRAMFS_NAME} \
 	    envsubst < config.txt.in > "$UNPACK_DIR/config.txt"
 
     ALPINE_REPO_URL="${BASE_HTTP_URL}/apks"
@@ -158,6 +160,79 @@ get_netboot_files() {
 	    ALPINE_REPO_URL=${ALPINE_REPO_URL} \
 	    MODLOOP_URL=${MODLOOP_URL} \
 	    envsubst < cmdline.txt.in > "$UNPACK_DIR/cmdline.txt"
+
+    APK_CACHE_DIR="${DOWNLOAD_DIR}/apk-${UNPACK_NAME}"
+    mkdir -p "$APK_CACHE_DIR"
+    if [ $? -ne 0 ]; then
+        echo "Could not create apk cache directory $APK_CACHE_DIR" 1>&2
+        exit -1
+    fi
+
+    # Create localhost.apkovl.tar.gz
+    OVERLAY_DIR="$BUILD_DIR/overlay-${UNPACK_NAME}"
+    mkdir -p "$OVERLAY_DIR"
+    if [ $? -ne 0 ]; then
+        echo "Could not create overlay directory $OVERLAY_DIR" 1>&2
+        exit -1
+    fi
+   
+    mkdir -p "$OVERLAY_DIR/etc/apk/cache"
+    if [ $? -ne 0 ]; then
+        echo "Could not create apk cache directory $OVERLAY_DIR/etc/apk/cache" 1>&2
+        exit -8
+    fi
+
+    mkdir -p "$OVERLAY_DIR/etc/apk"
+    cp /etc/apk/repositories $OVERLAY_DIR/etc/apk/
+
+    mount --bind "$APK_CACHE_DIR" "$OVERLAY_DIR/etc/apk/cache"
+    if [ $? -ne 0 ]; then
+        echo "Could not mount apk cache directory $APK_CACHE_DIR" 1>&2
+        exit -8
+    fi
+
+    apk --cache-dir add -U --initdb --allow-untrusted \
+        -p $OVERLAY_DIR \
+        --arch $IMAGE_ARCH \
+        alpine-base cloud-init
+    if [ $? -ne 0 ]; then
+        echo "Could not add alpine-base to chroot" 1>&2
+        exit -2
+    fi
+
+    chroot $OVERLAY_DIR /bin/sh -c "setup-cloud-init"
+    chroot $OVERLAY_DIR /bin/sh -c "rc-update add cloud-init default"
+
+    umount $OVERLAY_DIR/etc/apk/cache
+
+    # update initramfs
+    CHROOT_DIR="$BUILD_DIR/chroot-${INITRAMFS_NAME}"
+    if [ -d "$CHROOT_DIR" ]; then
+        echo "Chroot directory $CHROOT_DIR already exists" 1>&2
+        return 0
+    fi
+
+    mkdir -p "$CHROOT_DIR"
+    if [ $? -ne 0 ]; then
+        echo "Could not create chroot directory $CHROOT_DIR" 1>&2
+        exit -1
+    fi
+
+    tar czf "$CHROOT_DIR/localhost.apkovl.tar.gz" -C "$OVERLAY_DIR" .
+
+    # cpio the initramfs into the chroot
+    gzip -dc "$INITRAMFS_FILE" | (cd "$CHROOT_DIR" && cpio -idmv)
+    if [ $? -ne 0 ]; then
+        echo "Could not cpio the initramfs into the chroot" 1>&2
+        exit -1
+    fi
+
+    (cd "$CHROOT_DIR" && find . -print0 | cpio -o -H newc | gzip -9 > "$NEW_INITRAMFS_FILE")
+    if [ $? -ne 0 ]; then
+        echo "Could not repack initramfs" 1>&2
+        exit -1
+    fi
+    
 }
 
 
@@ -276,6 +351,7 @@ get_alpine_image() {
     echo "INITRAMFS_FILE_SIZE=$INITRAMFS_FILE_SIZE" >> "$META_FILE"
     echo "KERNEL_FILE_SIZE=$KERNEL_FILE_SIZE" >> "$META_FILE"
 }
+
 
 build_alpine_image() {
     IMAGE_TYPE="$1"
