@@ -1,5 +1,4 @@
 kernel=${KERNEL_FILE}
 initramfs ${INITRAMFS_FILE}
 arm_64bit=1
-enable_uart=1
 disable_splash=1

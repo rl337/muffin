@@ -1,25 +1,30 @@
-.PHONY: init build clean dist docker-build docker-promote get-latest-images scour verify-type verify-title verify-arch verify-alpine-version
+.PHONY: init build clean dist docker-build docker-promote fetch-alpine-release-file verify-type verify-arch verify-alpine-version verify-alpine-release verify-filename verify-destination
 
 CONTAINER_NAME := muffin_alpine
+BASE_HTTP_URL := https://dl-cdn.alpinelinux.org/alpine
 PROJECT ?= wiggly
 
 BUILD_ROOT ?= $(realpath ../build)
 CONTAINER_TAG := $(PROJECT)/$(CONTAINER_NAME)
 
 ifndef DOWNLOADS_ROOT
-	$(error DOWNLOADS_ROOT is not set. Usage: $(MAKE) -C alpine DOWNLOADS_ROOT=value)
-endif
-
-ifndef BUILD_ROOT
-	$(error BUILD_ROOT is not set. Usage: $(MAKE) -C alpine BUILD_ROOT=value)
+$(error DOWNLOADS_ROOT is not set. Usage: $(MAKE) -C alpine DOWNLOADS_ROOT=value)
 endif
 
 ifndef ALPINE_VERSION
-	$(error ALPINE_VERSION is not set. Usage: $(MAKE) -C alpine ALPINE_VERSION=value)
+$(error ALPINE_VERSION is not set. Usage: $(MAKE) -C alpine ALPINE_VERSION=value)
 endif
 
-ifndef BASE_HTTP_URL
-	$(error BASE_HTTP_URL is not set. Usage: $(MAKE) -C alpine BASE_HTTP_URL=value)
+ifndef BUILD_ROOT
+$(error BUILD_ROOT is not set. Usage: $(MAKE) -C alpine BUILD_ROOT=value)
+endif
+
+ifndef ARCH
+$(error ARCH is not set. Usage: $(MAKE) -C alpine ARCH=value)
+endif
+
+ifndef SERVER_IP
+$(error SERVER_IP is not set. Usage: $(MAKE) -C alpine SERVER_IP=value)
 endif
 
 docker-build:
@@ -47,37 +52,62 @@ verify-alpine-version:
 		exit 1; \
 	fi
 
-get-alpine-image: verify-type verify-arch verify-alpine-version docker-promote
+verify-alpine-release:
+	@if [ -z "$(ALPINE_RELEASE)" ]; then \
+		echo "ALPINE_RELEASE is not set"; \
+		exit 1; \
+	fi
 
-	docker run --rm --cap-add=SYS_ADMIN \
-	    -v .:/app \
-		-v $(DOWNLOADS_ROOT):/downloads \
-		-v $(BUILD_ROOT):/build \
-		$(CONTAINER_TAG):build \
-		/bin/sh -c -x "cd /app && BASE_HTTP_URL='$(BASE_HTTP_URL)' BUILD_DIR=/build DOWNLOAD_DIR=/downloads TYPE='$(TYPE)' TITLE='$(TITLE)' ALPINE_VERSION='$(ALPINE_VERSION)' ARCH='$(ARCH)' bash -x ./get-alpine.sh"
+verify-filename:
+	@if [ -z "$(FILENAME)" ]; then \
+		echo "FILENAME is not set"; \
+		exit 1; \
+	fi
 
+verify-destination-dir:
+	@if [ -z "$(DESTINATION_DIR)" ]; then \
+		echo "DESTINATION_DIR is not set"; \
+		exit 1; \
+	fi
 
-build: init docker-promote verify-type verify-arch
-	@echo "Stub: Building Alpine base images..."
+verify-destination-file:
+	@if [ -z "$(DESTINATION_FILE)" ]; then \
+		echo "DESTINATION_FILE is not set"; \
+		exit 1; \
+	fi
 
-	$(MAKE) get-alpine-image TYPE=$(TYPE) ARCH=$(ARCH) ALPINE_VERSION=$(ALPINE_VERSION) DOWNLOADS_ROOT=$(DOWNLOADS_ROOT) BUILD_ROOT=$(BUILD_ROOT)
+$(DOWNLOADS_ROOT)/%-$(ARCH)-$(ALPINE_VERSION): docker-promote verify-arch verify-alpine-version
+	$(MAKE) fetch-alpine-release-file \
+		ALPINE_RELEASE=netboot \
+		FILENAME=$* \
+		DESTINATION_DIR=$(DOWNLOADS_ROOT) \
+		DESTINATION_FILE=$(@F)
+
+$(BUILD_ROOT)/cmdline.txt: docker-promote verify-arch verify-alpine-version
+	ALPINE_REPO_URL="http://$(SERVER_IP)/apks" \
+	MODLOOP_URL="http://$(SERVER_IP)/modloop-rpi-$(ARCH)-$(ALPINE_VERSION)" \
+	NOCLOUD_CONFIG_URL="http://$(SERVER_IP)/configs" \
+	envsubst '$$ALPINE_REPO_URL $$MODLOOP_URL $$NOCLOUD_CONFIG_URL' < ./cmdline.txt.in > $(BUILD_ROOT)/cmdline.txt
+
+$(BUILD_ROOT)/config.txt: docker-promote verify-arch verify-alpine-version
+	KERNEL_FILE=vmlinuz-rpi-$(ARCH)-$(ALPINE_VERSION) \
+	INITRAMFS_FILE=initramfs-rpi-$(ARCH)-$(ALPINE_VERSION) \
+	envsubst '$$KERNEL_FILE $$INITRAMFS_FILE' < ./config.txt.in > $(BUILD_ROOT)/config.txt
+
+build: init docker-promote \
+	$(DOWNLOADS_ROOT)/vmlinuz-rpi-$(ARCH)-$(ALPINE_VERSION) \
+	$(DOWNLOADS_ROOT)/initramfs-rpi-$(ARCH)-$(ALPINE_VERSION) \
+	$(DOWNLOADS_ROOT)/modloop-rpi-$(ARCH)-$(ALPINE_VERSION) \
+	$(BUILD_ROOT)/cmdline.txt \
+	$(BUILD_ROOT)/config.txt
 
 clean:
-	rm -rf $(WORKING_DIR)
-
-scour:
-	rm -rf $(DOWNLOAD_DIR)
+	@echo "Stub: Cleaning Alpine base images..."
 
 dist: build
-	@echo "Stub: Installing Alpine outputs to dist/..."
-	cp $(WORKING_DIR)/$(shell cat $(WORKING_DIR)/virt-meta.txt | grep UNPACK_NAME | cut -f 2 -d=)/boot/vmlinuz-virt \
-	    $(TFTP_DIST)/vmlinuz-virt-$(shell cat $(WORKING_DIR)/virt-meta.txt | grep IMAGE_VERSION | cut -f 2 -d=)
-	cp $(WORKING_DIR)/$(shell cat $(WORKING_DIR)/virt-meta.txt | grep UNPACK_NAME | cut -f 2 -d=)/boot/initramfs-virt \
-	    $(TFTP_DIST)/initramfs-virt-$(shell cat $(WORKING_DIR)/virt-meta.txt | grep IMAGE_VERSION | cut -f 2 -d=)
-
-	cp $(WORKING_DIR)/$(shell cat $(WORKING_DIR)/rpi-meta.txt | grep UNPACK_NAME | cut -f 2 -d=)/vmlinuz-rpi \
-	    $(TFTP_DIST)/vmlinuz-rpi-$(shell cat $(WORKING_DIR)/rpi-meta.txt | grep IMAGE_VERSION | cut -f 2 -d=)
-	cp $(WORKING_DIR)/$(shell cat $(WORKING_DIR)/rpi-meta.txt | grep UNPACK_NAME | cut -f 2 -d=)/initramfs-rpi \
-	    $(TFTP_DIST)/initramfs-rpi-$(shell cat $(WORKING_DIR)/rpi-meta.txt | grep IMAGE_VERSION | cut -f 2 -d=)
-
+	cp $(BUILD_ROOT)/cmdline.txt $(TFTP_DIST)/
+	cp $(BUILD_ROOT)/config.txt $(TFTP_DIST)/
+	cp $(DOWNLOADS_ROOT)/vmlinuz-rpi-$(ARCH)-$(ALPINE_VERSION) $(TFTP_DIST)/
+	cp $(DOWNLOADS_ROOT)/initramfs-rpi-$(ARCH)-$(ALPINE_VERSION) $(TFTP_DIST)/
+	cp $(DOWNLOADS_ROOT)/modloop-rpi-$(ARCH)-$(ALPINE_VERSION) $(TFTP_DIST)/
 

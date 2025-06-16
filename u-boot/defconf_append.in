@@ -1,4 +1,0 @@
-CONFIG_BOOTCOMMAND="setenv serverip ${SERVER_IP}; setenv scriptaddr ${SCRIPT_ADDR}; dhcp; ${TRANSFER_COMMAND} ${scriptaddr} ${UBOOT_SCRIPT}; source ${scriptaddr}"
-CONFIG_CMD_NFS=y
-CONFIG_FS_NFS=y
-CONFIG_NFS_TIMEOUT=10000
