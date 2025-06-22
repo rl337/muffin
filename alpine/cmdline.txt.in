@@ -1,1 +1,1 @@
-modules=loop,squashfs ip=dhcp alpine_repo=${ALPINE_REPO_URL} modloop=${MODLOOP_URL} tinycloud ds=nocloud;s=${NOCLOUD_CONFIG_URL}
+modules=loop,squashfs ip=dhcp alpine_repo=${ALPINE_REPO_URL} modloop=${MODLOOP_URL} apkovl=${APKOVL_URL} tinycloud ds=nocloud;s=${NOCLOUD_CONFIG_URL}

@@ -32,6 +32,7 @@ $(error SERVER_IP is not set. Usage: $(MAKE) -C alpine SERVER_IP=value)
 endif
 
 APKS_DIRECTORY := $(DOWNLOADS_ROOT)/apks/$(ALPINE_VERSION)/$(ARCH)
+APKS_REPOSITORY := $(DOWNLOADS_ROOT)/apks/$(ALPINE_VERSION)/
 
 PLATFORM_linux/aarch64  := linux/arm64
 PLATFORM_linux/x86_64   := linux/amd64
@@ -60,13 +61,26 @@ fetch-alpine-release-file: docker-promote verify-ALPINE_RELEASE verify-ARCH veri
 		/bin/sh -c "wget $(BASE_HTTP_URL)/$(ALPINE_VERSION)/releases/$(ARCH)/$(ALPINE_RELEASE)/$(FILENAME) -O /downloads/$(DESTINATION_FILE)"
 
 refresh-apk-mirror: docker-promote verify-ARCH verify-ALPINE_VERSION
+	mkdir -p $(APKS_DIRECTORY) && \
 	docker run --platform=$(PLATFORM) --rm \
-		-v $(APKS_DIRECTORY):/apks \
+		-v $(APKS_REPOSITORY):/apks \
+		-v $(BUILD_ROOT):/build \
 		-v .:/app \
 		$(CONTAINER_TAG):build \
 		/bin/sh -cx "apk update && \
-			apk fetch --recursive --output /apks $$(cat required_packages.txt | tr '\n' ' ') && \
-			apk index -o /apks/APKINDEX.tar.gz /apks/*.apk"
+		    apk --simulate add $$(cat required_packages.txt | tr '\n' ' ') | \
+			    grep -v 'OK' | cut -f3 -d\  > /build/full-package-list-$(ARCH).txt && \
+			apk fetch --recursive --output /apks/$(ARCH) \`cat /build/full-package-list-$(ARCH).txt | tr '\n' ' '\` && \
+			apk index --rewrite-arch $(ARCH) -o /apks/$(ARCH)/APKINDEX.tar.gz /apks/$(ARCH)/*.apk"
+
+$(BUILD_ROOT)/apkovl-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION).tar.gz: refresh-apk-mirror
+	docker run --platform=$(PLATFORM) --rm \
+		-v $(BUILD_ROOT):/build \
+		-v $(APKS_REPOSITORY):/apks \
+		$(CONTAINER_TAG):build \
+		/bin/sh -cx "\
+			apk --root /build/apkovl-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION) --verbose --verbose --allow-untrusted --repository /apks --initdb add $$(cat required_packages.txt | tr '\n' ' ') && \
+			tar -czf /build/apkovl-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION).tar.gz -C /build/apkovl-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION) ."
 
 $(DOWNLOADS_ROOT)/%-$(ARCH)-$(ALPINE_VERSION): 
 	$(MAKE) verify-ARCH 
@@ -77,22 +91,23 @@ $(DOWNLOADS_ROOT)/%-$(ARCH)-$(ALPINE_VERSION):
 		DESTINATION_DIR=$(DOWNLOADS_ROOT) \
 		DESTINATION_FILE=$(@F)
 
-$(BUILD_ROOT)/cmdline.txt:
+$(BUILD_ROOT)/cmdline.txt: cmdline.txt.in
 	$(MAKE) verify-ARCH 
 	$(MAKE) verify-ALPINE_VERSION 
 	ALPINE_REPO_URL="http://$(SERVER_IP)/apks/$(ALPINE_VERSION)" \
 		MODLOOP_URL="http://$(SERVER_IP)/modloop-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION)" \
 		NOCLOUD_CONFIG_URL="http://$(SERVER_IP)/configs" \
-		envsubst '$$ALPINE_REPO_URL $$MODLOOP_URL $$NOCLOUD_CONFIG_URL' < ./cmdline.txt.in > $(BUILD_ROOT)/cmdline.txt
+		APKOVL_URL="http://$(SERVER_IP)/apkovl-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION).tar.gz" \
+		envsubst '$$ALPINE_REPO_URL $$MODLOOP_URL $$NOCLOUD_CONFIG_URL $$APKOVL_URL' < ./cmdline.txt.in > $(BUILD_ROOT)/cmdline.txt
 
-$(BUILD_ROOT)/config.txt:
+$(BUILD_ROOT)/config.txt: cmdline.txt.in
 	$(MAKE) verify-ARCH 
 	$(MAKE) verify-ALPINE_VERSION 
 	KERNEL_FILE=vmlinuz-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION) \
 		INITRAMFS_FILE=initramfs-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION) \
 		envsubst '$$KERNEL_FILE $$INITRAMFS_FILE' < ./config.txt.in > $(BUILD_ROOT)/config.txt
 
-build: refresh-apk-mirror \
+build: $(BUILD_ROOT)/apkovl-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION).tar.gz \
 	$(DOWNLOADS_ROOT)/vmlinuz-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION) \
 	$(DOWNLOADS_ROOT)/initramfs-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION) \
 	$(DOWNLOADS_ROOT)/modloop-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION) \
@@ -108,6 +123,7 @@ dist: build
 		cp $(BUILD_ROOT)/config.txt $(TFTP_DIST)/; \
 	fi
 
+	cp $(BUILD_ROOT)/apkovl-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION).tar.gz $(TFTP_DIST)/
 	cp $(DOWNLOADS_ROOT)/vmlinuz-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION) $(TFTP_DIST)/
 	cp $(DOWNLOADS_ROOT)/initramfs-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION) $(TFTP_DIST)/
 	cp $(DOWNLOADS_ROOT)/modloop-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION) $(TFTP_DIST)/

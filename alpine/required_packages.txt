@@ -1,3 +1,4 @@
 alpine-base
+openrc
 busybox
 tiny-cloud
