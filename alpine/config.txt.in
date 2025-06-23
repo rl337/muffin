@@ -2,3 +2,5 @@ kernel=${KERNEL_FILE}
 initramfs ${INITRAMFS_FILE}
 arm_64bit=1
 disable_splash=1
+start_x=0
+disable_camera_led=1

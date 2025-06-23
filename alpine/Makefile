@@ -38,6 +38,11 @@ PLATFORM_linux/aarch64  := linux/arm64
 PLATFORM_linux/x86_64   := linux/amd64
 PLATFORM := $(PLATFORM_linux/$(ARCH))
 
+APK_PUB_KEY_NAME := $(PROJECT)-apkkey.rsa.pub
+APK_PRIV_KEY_NAME := $(PROJECT)-apkkey.rsa
+
+APK_PUB_KEY_FILE := $(BUILD_ROOT)/$(APK_PUB_KEY_NAME)
+APK_PRIV_KEY_FILE := $(BUILD_ROOT)/$(APK_PRIV_KEY_NAME)
 
 docker-build:
 	docker build --platform=$(PLATFORM) -t $(CONTAINER_TAG):latest .
@@ -60,26 +65,41 @@ fetch-alpine-release-file: docker-promote verify-ALPINE_RELEASE verify-ARCH veri
 		$(CONTAINER_TAG):build \
 		/bin/sh -c "wget $(BASE_HTTP_URL)/$(ALPINE_VERSION)/releases/$(ARCH)/$(ALPINE_RELEASE)/$(FILENAME) -O /downloads/$(DESTINATION_FILE)"
 
-refresh-apk-mirror: docker-promote verify-ARCH verify-ALPINE_VERSION
+$(APK_PUB_KEY_FILE):
+	docker run --platform=$(PLATFORM) --rm \
+		-v $(BUILD_ROOT):/build \
+		$(CONTAINER_TAG):build \
+		/bin/sh -cx "abuild-keygen -a -n && cp /home/builder/.abuild/-*.rsa.pub /build/$(APK_PUB_KEY_NAME) && cp /home/builder/.abuild/-*.rsa /build/$(APK_PRIV_KEY_NAME)"
+
+refresh-apk-mirror: docker-promote verify-ARCH verify-ALPINE_VERSION $(APK_PUB_KEY_FILE)
 	mkdir -p $(APKS_DIRECTORY) && \
 	docker run --platform=$(PLATFORM) --rm \
 		-v $(APKS_REPOSITORY):/apks \
 		-v $(BUILD_ROOT):/build \
 		-v .:/app \
 		$(CONTAINER_TAG):build \
-		/bin/sh -cx "apk update && \
-		    apk --simulate add $$(cat required_packages.txt | tr '\n' ' ') | \
+		/bin/sh -cx "mkdir -p /tmp/simulation-root/etc/ && \
+			cp -r /etc/apk /tmp/simulation-root/etc && \
+			apk --root=/tmp/simulation-root add --initdb && \
+			apk --root=/tmp/simulation-root update && \
+		    apk --root=/tmp/simulation-root --simulate add $$(cat required_packages.txt | tr '\n' ' ') | \
 			    grep -v 'OK' | cut -f3 -d\  > /build/full-package-list-$(ARCH).txt && \
-			apk fetch --recursive --output /apks/$(ARCH) \`cat /build/full-package-list-$(ARCH).txt | tr '\n' ' '\` && \
-			apk index --rewrite-arch $(ARCH) -o /apks/$(ARCH)/APKINDEX.tar.gz /apks/$(ARCH)/*.apk"
+			apk --root=/tmp/simulation-root fetch --recursive --output /apks/$(ARCH) \`cat /build/full-package-list-$(ARCH).txt | tr '\n' ' '\` && \
+			apk index --rewrite-arch $(ARCH) -o /apks/$(ARCH)/APKINDEX.tar.gz /apks/$(ARCH)/*.apk && \
+			abuild-sign -k /build/$(APK_PRIV_KEY_NAME) /apks/$(ARCH)/APKINDEX.tar.gz"
 
 $(BUILD_ROOT)/apkovl-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION).tar.gz: refresh-apk-mirror
+	mkdir -p $(BUILD_ROOT)/apkovl-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION) && \
+	mkdir -p $(BUILD_ROOT)/apkovl-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION)/etc/apk/keys && \
+	cp $(APK_PUB_KEY_FILE) $(BUILD_ROOT)/apkovl-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION)/etc/apk/keys/ 
 	docker run --platform=$(PLATFORM) --rm \
 		-v $(BUILD_ROOT):/build \
 		-v $(APKS_REPOSITORY):/apks \
+		--cap-add=SYS_CHROOT -u root \
 		$(CONTAINER_TAG):build \
 		/bin/sh -cx "\
 			apk --root /build/apkovl-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION) --verbose --verbose --allow-untrusted --repository /apks --initdb add $$(cat required_packages.txt | tr '\n' ' ') && \
+			touch /build/apkovl-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION)/etc/.default_boot_services && \
 			tar -czf /build/apkovl-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION).tar.gz -C /build/apkovl-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION) ."
 
 $(DOWNLOADS_ROOT)/%-$(ARCH)-$(ALPINE_VERSION): 
@@ -106,6 +126,7 @@ $(BUILD_ROOT)/config.txt: cmdline.txt.in
 	KERNEL_FILE=vmlinuz-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION) \
 		INITRAMFS_FILE=initramfs-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION) \
 		envsubst '$$KERNEL_FILE $$INITRAMFS_FILE' < ./config.txt.in > $(BUILD_ROOT)/config.txt
+
 
 build: $(BUILD_ROOT)/apkovl-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION).tar.gz \
 	$(DOWNLOADS_ROOT)/vmlinuz-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION) \
