@@ -1,0 +1,12 @@
+- name: Configure apkovl chroot
+  hosts: chroots
+  tasks:
+    - name: Set hostname
+      copy:
+        content: "myhost"
+        dest: /etc/hostname
+
+    - name: Ensure alpine-base is installed
+      apk:
+        name: alpine-base
+        update_cache: true

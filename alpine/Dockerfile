@@ -9,9 +9,6 @@ RUN apk add --no-cache mtools libarchive-tools gzip xorriso
 # qemu related stuff
 RUN apk add --no-cache qemu-x86_64 qemu-i386 openrc qemu-openrc qemu-img
 
-RUN apk add --no-cache gettext abuild doas
-
-RUN adduser -D builder -g "Muffin Builder"
-USER builder
+RUN apk add --no-cache gettext abuild doas ansible
 
 WORKDIR /app

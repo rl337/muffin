@@ -2,3 +2,5 @@ alpine-base
 openrc
 busybox
 tiny-cloud
+openssh
+python3

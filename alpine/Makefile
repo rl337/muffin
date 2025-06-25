@@ -44,6 +44,12 @@ APK_PRIV_KEY_NAME := $(PROJECT)-apkkey.rsa
 APK_PUB_KEY_FILE := $(BUILD_ROOT)/$(APK_PUB_KEY_NAME)
 APK_PRIV_KEY_FILE := $(BUILD_ROOT)/$(APK_PRIV_KEY_NAME)
 
+BUILD_NAME := $(HARDWARE)-$(ARCH)-$(ALPINE_VERSION)
+ANSIBLE_NAME := ansible-$(BUILD_NAME)
+CHROOT_NAME := apkovl-$(BUILD_NAME)
+ANSIBLE_DIRECTORY := $(BUILD_ROOT)/$(ANSIBLE_NAME)
+CHROOT_PATH := $(BUILD_ROOT)/$(CHROOT_NAME)
+
 docker-build:
 	docker build --platform=$(PLATFORM) -t $(CONTAINER_TAG):latest .
 
@@ -57,6 +63,11 @@ verify-%:
 		exit 1; \
 	fi
 
+$(ANSIBLE_DIRECTORY): verify-CHROOT_PATH
+	mkdir -p $(ANSIBLE_DIRECTORY)
+	cp -r ansible/* $(ANSIBLE_DIRECTORY)/
+	CHROOT_PATH=/build/$(CHROOT_NAME) \
+	    envsubst '$$CHROOT_PATH' < ansible/inventory.ini.in > $(ANSIBLE_DIRECTORY)/inventory.ini
 
 fetch-alpine-release-file: docker-promote verify-ALPINE_RELEASE verify-ARCH verify-ALPINE_VERSION verify-FILENAME verify-DESTINATION_DIR verify-DESTINATION_FILE
 	@echo "Downloading Alpine $(ALPINE_RELEASE) file $(FILENAME)..."
@@ -69,7 +80,7 @@ $(APK_PUB_KEY_FILE):
 	docker run --platform=$(PLATFORM) --rm \
 		-v $(BUILD_ROOT):/build \
 		$(CONTAINER_TAG):build \
-		/bin/sh -cx "abuild-keygen -a -n && cp /home/builder/.abuild/-*.rsa.pub /build/$(APK_PUB_KEY_NAME) && cp /home/builder/.abuild/-*.rsa /build/$(APK_PRIV_KEY_NAME)"
+		/bin/sh -cx "abuild-keygen -a -n && cp /root/.abuild/-*.rsa.pub /build/$(APK_PUB_KEY_NAME) && cp /root/.abuild/-*.rsa /build/$(APK_PRIV_KEY_NAME)"
 
 refresh-apk-mirror: docker-promote verify-ARCH verify-ALPINE_VERSION $(APK_PUB_KEY_FILE)
 	mkdir -p $(APKS_DIRECTORY) && \
@@ -89,18 +100,19 @@ refresh-apk-mirror: docker-promote verify-ARCH verify-ALPINE_VERSION $(APK_PUB_K
 			abuild-sign -k /build/$(APK_PRIV_KEY_NAME) /apks/$(ARCH)/APKINDEX.tar.gz"
 
 $(BUILD_ROOT)/apkovl-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION).tar.gz: refresh-apk-mirror
-	mkdir -p $(BUILD_ROOT)/apkovl-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION) && \
-	mkdir -p $(BUILD_ROOT)/apkovl-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION)/etc/apk/keys && \
-	cp $(APK_PUB_KEY_FILE) $(BUILD_ROOT)/apkovl-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION)/etc/apk/keys/ 
-	docker run --platform=$(PLATFORM) --rm \
-		-v $(BUILD_ROOT):/build \
-		-v $(APKS_REPOSITORY):/apks \
-		--cap-add=SYS_CHROOT -u root \
-		$(CONTAINER_TAG):build \
-		/bin/sh -cx "\
-			apk --root /build/apkovl-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION) --verbose --verbose --allow-untrusted --repository /apks --initdb add $$(cat required_packages.txt | tr '\n' ' ') && \
-			touch /build/apkovl-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION)/etc/.default_boot_services && \
-			tar -czf /build/apkovl-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION).tar.gz -C /build/apkovl-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION) ."
+	$(MAKE) $(ANSIBLE_DIRECTORY) && \
+		mkdir -p $(CHROOT_PATH) && \
+		mkdir -p $(CHROOT_PATH)/etc/apk/keys && \
+		cp $(APK_PUB_KEY_FILE) $(CHROOT_PATH)/etc/apk/keys/ && \
+		docker run --platform=$(PLATFORM) --rm \
+			-v $(BUILD_ROOT):/build \
+			-v $(APKS_REPOSITORY):/apks \
+			--cap-add=SYS_CHROOT -u root \
+			$(CONTAINER_TAG):build \
+			/bin/sh -cx "\
+				apk --root /build/$(CHROOT_NAME) --repository /apks --initdb add $$(cat required_packages.txt | tr '\n' ' ') && \
+				ansible-playbook -i /build/$(ANSIBLE_NAME)/inventory.ini /build/$(ANSIBLE_NAME)/playbooks/setup_apkovl_chroot.yml && \
+				tar -czf /build/$(CHROOT_NAME).tar.gz -C /build/$(CHROOT_NAME) ."
 
 $(DOWNLOADS_ROOT)/%-$(ARCH)-$(ALPINE_VERSION): 
 	$(MAKE) verify-ARCH 

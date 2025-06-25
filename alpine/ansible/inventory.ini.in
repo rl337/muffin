@@ -1,0 +1,3 @@
+[chroots]
+${CHROOT_PATH} ansible_connection=chroot
+
