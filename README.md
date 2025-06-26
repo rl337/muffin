@@ -39,7 +39,27 @@ The following are configuration files which will be customized by our build scri
 * cmdline.txt
 * config.txt
 
+To customize the builds I'm using an apkovl file.  This is a tarball of a base system constructed using the process below.
+* apkovl.tar.gz
+
 See [Netbooting Raspberry Pi](https://wiki.alpinelinux.org/wiki/Netbooting_Raspberry_Pi)
+
+Generating an apkovl root filesystem from an `alpine:latest` container
+* Run the container exposing current dir: `docker run --rm -v $PWD:/build -it alpine:latest sh`
+* Create an initial directory: `mkdir /build/chroot`
+* Create the etc directory in the chroot: `mkdir /build/chroot/etc`
+* copy the container's apk configs into the chroot: `cp -r /etc/apk /build/chroot/etc`
+* initialize apk in the chroot `apk --root=/build/chroot add --initdb`
+* Update the apk inventory: `apk --root=/build/chroot update`
+* Install alpine-base: `apk --root=/build/chroot add alpine-base`
+* Perform customization steps here.
+* Create tarball with compression: `tar -czf /build/apkovl.tar.gz -C /build/chroot .`
+
+The customization in the second to last step can be done inline to the script but for this project I wanted a more robust way of customizing systems so I used Ansible playbooks.
+Playbook steps for the Muffin architecture are:
+* Setup chrony to address initial clock skews
+* generate and supply ssh keys to the overlay
+* setup cloud-init via tiny-cloud
 
 ## Virtualization 
 
