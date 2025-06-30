@@ -1,0 +1,53 @@
+- name: Create and sign SSH keys
+  hosts: none
+  tasks:
+    - name: Generate SSH host RSA key
+      community.crypto.openssh_keypair:
+        path: /etc/ssh/ssh_host_rsa_key
+        type: rsa
+        size: 4096
+        mode: "0600"
+        comment: "Host SSH key"
+      register: host_key
+
+    - name: Copy host public key to control machine for signing
+      fetch:
+        src: /etc/ssh/ssh_host_rsa_key.pub
+        dest: /tmp/{{ inventory_hostname }}.pub
+        flat: yes
+
+    - name: Sign host key using CA (on control node)
+      delegate_to: localhost
+      run_once: true
+      shell: |
+        ssh-keygen -s /etc/ssh/ca_host \
+          -I {{ inventory_hostname }} \
+          -h \
+          -n {{ inventory_hostname }},{{ hostvars[inventory_hostname].ansible_host | default('127.0.0.1') }} \
+          -V +52w \
+          /tmp/{{ inventory_hostname }}.pub
+      args:
+        creates: "/tmp/{{ inventory_hostname }}-cert.pub"
+
+    - name: Push signed certificate to target
+      copy:
+        src: "/tmp/{{ inventory_hostname }}-cert.pub"
+        dest: /etc/ssh/ssh_host_rsa_key-cert.pub
+        mode: "0644"
+
+    - name: Configure sshd to use host certificate
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^HostCertificate"
+        line: "HostCertificate /etc/ssh/ssh_host_rsa_key-cert.pub"
+
+    - name: Ensure HostKey is listed (if not already)
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^HostKey /etc/ssh/ssh_host_rsa_key$"
+        line: "HostKey /etc/ssh/ssh_host_rsa_key"
+
+    - name: Ensure sshd starts on boot
+      command: rc-update add sshd default
+      args:
+        creates: /etc/runlevels/default/sshd

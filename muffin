@@ -1,0 +1,49 @@
+#!/bin/sh
+
+which docker > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+    echo "Could not find docker in path" 1>&2
+    exit -1
+fi
+
+if [ ! -f env.sh ]; then
+    echo "Could not find env.sh copy and customize env.sh.in" 1>&2
+    exit -2
+fi
+
+realpath . > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+    echo "Could not find realpath in path" 1>&2
+    exit -3
+fi
+
+docker build -t muffin_main .
+
+. env.sh
+MUFFIN_PATH=$(realpath $0)
+MUFFIN_DIR=$(dirname $MUFFIN_PATH)
+PROJECT_ROOT=$(realpath $MUFFIN_DIR)
+
+
+REAL_PROJECT_ROOT=$(realpath $PROJECT_ROOT)
+REAL_SCRATCH_DIR=$(realpath $SCRATCH_DIR)
+REAL_ARTIFACTS_DIR=$(realpath $ARTIFACTS_DIR)
+REAL_DOWNLOADS_DIR=$(realpath $DOWNLOADS_DIR)
+
+DIST_DIR=$REAL_SCRATCH_DIR/dist
+
+docker run --rm \
+    -v /var/run/docker.sock:/var/run/docker.sock \
+    -v $REAL_PROJECT_ROOT:$REAL_PROJECT_ROOT \
+    -v $REAL_SCRATCH_DIR:$REAL_SCRATCH_DIR \
+    -v $REAL_ARTIFACTS_DIR:$REAL_ARTIFACTS_DIR \
+    -v $REAL_DOWNLOADS_DIR:$REAL_DOWNLOADS_DIR \
+    --workdir $REAL_PROJECT_ROOT \
+    muffin_main "$@" \
+        PROJECT_ROOT=$REAL_PROJECT_ROOT \
+        SCRATCH_ROOT=$REAL_SCRATCH_DIR \
+        DOWNLOADS_ROOT=$REAL_DOWNLOADS_DIR \
+        DIST_ROOT=$DIST_DIR \
+        ARTIFACTS_ROOT=$REAL_ARTIFACTS_DIR \
+        TFTP_SERVER_IP=$TFTP_SERVER_IP \
+        HTTP_SERVER_IP=$HTTP_SERVER_IP 

@@ -1,0 +1,5 @@
+[all]
+myhost         ansible_host=192.168.1.154
+
+[pi4]
+myhost

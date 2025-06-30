@@ -4,3 +4,4 @@ busybox
 tiny-cloud
 openssh
 python3
+chrony
