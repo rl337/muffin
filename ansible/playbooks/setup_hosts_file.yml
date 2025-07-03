@@ -1,0 +1,16 @@
+---
+- name: Configure /etc/hosts on all hosts
+  hosts: localhost
+  connection: local
+  tasks:
+    - name: Create hosts in /artifacts first
+      ansible.builtin.template:
+        src: "{{ project_root }}/ansible/templates/hosts.j2"
+        dest: "{{ artifacts_root }}/hosts"
+        owner: root
+        group: root
+        mode: "0644"
+      delegate_to: localhost
+      run_once: true
+      tags:
+        - generate_artifacts

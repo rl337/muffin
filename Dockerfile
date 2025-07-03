@@ -1,6 +1,6 @@
 FROM alpine:latest
 
-RUN apk add --no-cache docker make gettext ansible
+RUN apk add --no-cache docker make gettext ansible rsync
 
 WORKDIR /
 

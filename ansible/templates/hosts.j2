@@ -1,0 +1,8 @@
+# /etc/hosts file managed by Ansible
+127.0.0.1   localhost
+::1         localhost
+
+{% for host in groups['all'] %}
+{{ hostvars[host].ansible_host }} {{ host }} {% if 'aliases' in hostvars[host] %}{% for alias in hostvars[host].aliases.split(',') %}{{ alias.strip() }} {% endfor %}{% endif %}
+
+{% endfor %}

@@ -1,0 +1,22 @@
+- name: Setup initrc services
+  hosts: chroots
+  tasks:
+    - name: Enable local service at boot
+      command: rc-update add local default
+      args:
+        creates: /etc/runlevels/default/local
+
+    - name: Ensure networking service is enabled
+      command: rc-update add networking default
+      args:
+        creates: /etc/runlevels/default/networking
+
+    - name: Add dummy /etc/network/interfaces to satisfy ifquery
+      copy:
+        dest: /etc/network/interfaces
+        content: |
+          auto lo
+          iface lo inet loopback
+          auto eth0
+          iface eth0 inet dhcp
+        mode: "0644"

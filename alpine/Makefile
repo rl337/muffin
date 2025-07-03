@@ -143,6 +143,7 @@ $(BUILD_ROOT)/apkovl-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION).tar.gz: refresh-apk-m
 		cp $(APK_PUB_KEY_FILE) $(CHROOT_PATH)/etc/apk/keys/ && \
 		docker run --platform=$(PLATFORM) --rm \
 			-v $(BUILD_ROOT):$(BUILD_ROOT) \
+			-v $(ARTIFACTS_ROOT):$(ARTIFACTS_ROOT) \
 			-v $(APKS_REPOSITORY):$(APKS_REPOSITORY) \
 			--cap-add=SYS_CHROOT -u root \
 			$(CONTAINER_TAG):build \
@@ -193,9 +194,10 @@ dist: build
 		cp $(BUILD_ROOT)/config.txt $(TFTP_DIST)/; \
 	fi
 
-	cp $(BUILD_ROOT)/apkovl-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION).tar.gz $(TFTP_DIST)/
 	cp $(DOWNLOADS_ROOT)/vmlinuz-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION) $(TFTP_DIST)/
 	cp $(DOWNLOADS_ROOT)/initramfs-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION) $(TFTP_DIST)/
 	cp $(DOWNLOADS_ROOT)/modloop-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION) $(TFTP_DIST)/
 
+	cp $(BUILD_ROOT)/apkovl-$(HARDWARE)-$(ARCH)-$(ALPINE_VERSION).tar.gz $(HTTP_DIST)/
+	mkdir -p $(HTTP_DIST)/apks/$(ALPINE_VERSION)/$(ARCH)/
 	rsync -avz $(APKS_DIRECTORY)/ $(HTTP_DIST)/apks/$(ALPINE_VERSION)/$(ARCH)/

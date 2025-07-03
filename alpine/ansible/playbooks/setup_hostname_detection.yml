@@ -1,0 +1,33 @@
+- name: Copy hosts file from artifacts to etc
+  hosts: chroots
+  tasks:
+    - name: Copy hosts file from artifacts to etc
+      ansible.builtin.copy:
+        src: "{{ artifacts_root }}/hosts"
+        dest: /etc/hosts
+        owner: root
+        group: root
+        mode: "0644"
+    - name: Ensure /etc/local.d exists
+      file:
+        path: /etc/local.d
+        state: directory
+        mode: "0755"
+
+    - name: Create dynamic hostname setting script
+      copy:
+        dest: /etc/local.d/sethostname.start
+        mode: "0755"
+        content: |
+          #!/bin/sh
+          echo "Running sethostname.start" >> /var/log/sethostname.log
+          IP=$(ip -4 addr show dev eth0 | awk '/inet / {print $2}' | cut -d/ -f1)
+          HOSTNAME=$(awk -v ip="$IP" '$1 == ip { print $2 }' /etc/hosts)
+          if [ -n "$HOSTNAME" ]; then
+            echo "$HOSTNAME" > /etc/hostname
+            hostname "$HOSTNAME"
+            echo "Hostname set to $HOSTNAME" >> /var/log/sethostname.log
+          else
+            echo "No hostname found for IP $IP" >> /var/log/sethostname.log
+          fi
+          echo "Ending sethostname.start" >> /var/log/sethostname.log
