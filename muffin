@@ -30,7 +30,22 @@ REAL_SCRATCH_DIR=$(realpath $SCRATCH_DIR)
 REAL_ARTIFACTS_DIR=$(realpath $ARTIFACTS_DIR)
 REAL_DOWNLOADS_DIR=$(realpath $DOWNLOADS_DIR)
 
+docker build -t muffin_main .
+
 DIST_DIR=$REAL_SCRATCH_DIR/dist
+if [ "X$1" == "Xshell" ]; then
+    docker run -it --rm \
+        -v $REAL_PROJECT_ROOT:$REAL_PROJECT_ROOT \
+        -v $REAL_SCRATCH_DIR:$REAL_SCRATCH_DIR \
+        -v $REAL_ARTIFACTS_DIR:$REAL_ARTIFACTS_DIR \
+        -v $REAL_DOWNLOADS_DIR:$REAL_DOWNLOADS_DIR \
+        --workdir $REAL_PROJECT_ROOT \
+        --entrypoint /bin/sh \
+        muffin_main -c "\
+		    cat $REAL_ARTIFACTS_DIR/hosts > /etc/hosts && \
+			exec /bin/bash"
+    exit 0
+fi
 
 docker run --rm \
     -v /var/run/docker.sock:/var/run/docker.sock \

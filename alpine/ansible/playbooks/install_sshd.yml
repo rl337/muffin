@@ -1,0 +1,12 @@
+- name: Install and make sure sshd is running
+  hosts: chroots
+  tasks:
+    - name: Ensure sshd is installed
+      apk:
+        name: openssh
+        state: present
+
+    - name: Enable sshd on boot
+      command: rc-update add sshd boot
+      args:
+        creates: /etc/runlevels/boot/sshd
