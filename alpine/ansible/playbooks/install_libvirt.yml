@@ -1,0 +1,12 @@
+- name: Install and make sure libvirtd is running
+  hosts: chroots
+  tasks:
+    - name: Ensure libvirtd is installed
+      apk:
+        name: libvirt
+        state: present
+
+    - name: Enable libvirtd service
+      command: rc-update add libvirtd default
+      args:
+        creates: /etc/runlevels/default/libvirtd

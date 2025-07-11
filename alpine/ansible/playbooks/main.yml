@@ -2,3 +2,4 @@
 - import_playbook: setup_hostname_detection.yml
 - import_playbook: install_chrony.yml
 - import_playbook: install_sshd.yml
+- import_playbook: install_libvirt.yml

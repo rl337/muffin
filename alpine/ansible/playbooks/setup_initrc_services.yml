@@ -1,6 +1,14 @@
 - name: Setup initrc services
   hosts: chroots
   tasks:
+    - name: Disable kernel hung task timeout via local.d script
+      copy:
+        dest: /etc/local.d/disable-hung-task.start
+        content: |
+          #!/bin/sh
+          echo 0 > /proc/sys/kernel/hung_task_timeout_secs
+        mode: "0755"
+
     - name: Enable local service at boot
       command: rc-update add local default
       args:

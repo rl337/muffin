@@ -5,3 +5,10 @@ tiny-cloud
 openssh
 python3
 chrony
+qemu-system-aarch64
+qemu-img
+libvirt
+libvirt-daemon
+ebtables
+iptables
+nfs-utils
